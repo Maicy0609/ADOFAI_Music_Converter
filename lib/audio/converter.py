@@ -131,8 +131,15 @@ class AudioZipperConverter:
     拉链模式转换器
     固定角度，通过BPM变化控制时间
 
-    时间公式：时间 = 固定角度/180 × 60/BPM
-    因此：BPM = 固定角度/180 × 60/时间
+    拉链模式原理：
+    - 用户设置夹角 θ（如15°）
+    - angleData 序列：[0, 180-θ, 0, 180-θ, ...]
+    - 例如 θ=15° 时：angleData = [0, 165, 0, 165, 0, 165, ...]
+    - 旋转角度固定为 θ，方向交替（左转、右转、左转...）
+    - 形成锯齿/拉链形状
+
+    时间公式：时间 = θ/180 × 60/BPM
+    因此：BPM = θ/180 × 60/时间
     """
 
     def __init__(self, base_angle: float = 15.0):
@@ -155,10 +162,10 @@ class AudioZipperConverter:
     @staticmethod
     def get_magic_number(angle: float) -> float:
         """
-        计算魔法数字
+        计算魔法数字（BPM倍增因子）
 
         Args:
-            angle: 夹角
+            angle: 夹角度数
 
         Returns:
             float: 魔法数字 = 180 / angle
@@ -185,9 +192,6 @@ class AudioZipperConverter:
         if not beat_times:
             return MapData(use_angle_data=True)
 
-        # 计算魔法数字
-        magic_number = self.get_magic_number(self.base_angle)
-
         map_data = MapData(use_angle_data=True)
 
         # 设置基础BPM（使用估计值）
@@ -199,6 +203,11 @@ class AudioZipperConverter:
 
         tile_data_list = map_data.tile_data_list
 
+        # 计算交替角度
+        # 拉链序列：[0, 180-angle, 0, 180-angle, ...]
+        # 例如 angle=15° 时：[0, 165, 0, 165, ...]
+        alternate_angle = 180.0 - self.base_angle
+
         # 添加起始瓷砖
         tile_data_list.append(TileData(0, angle=0))
 
@@ -207,55 +216,30 @@ class AudioZipperConverter:
         for i in range(1, len(beat_times)):
             intervals.append(beat_times[i] - beat_times[i - 1])
 
-        # 当前绝对角度
-        current_angle = 0.0
-
         for i, interval in enumerate(intervals):
-            # 计算需要的BPM
-            # 时间 = 固定角度/180 × 60/BPM
-            # BPM = 固定角度/180 × 60/时间
-            # 但实际显示BPM需要除以魔法数字
-            # 实际BPM = 60 / 时间间隔（秒）
-            # 显示BPM = 实际BPM / 魔法数字
-            actual_bpm = 60.0 / interval
-            display_bpm = actual_bpm / magic_number * magic_number  # 保持一致性
+            # 计算显示BPM
+            # 时间 = angle/180 × 60/BPM
+            # BPM = angle/180 × 60/时间
+            display_bpm = self.base_angle / 180.0 * 60.0 / interval
 
-            # 简化：直接计算需要的显示BPM
-            # 时间 = angle/180 × 60/display_bpm
-            # display_bpm = angle/180 × 60/时间
-            to_bpm = self.base_angle / 180.0 * 60.0 / interval
-
-            # 计算总旋转角度
-            total_rotate_angle = self.base_angle
-
-            # 计算下一个角度
-            next_angle = current_angle + 180.0 - total_rotate_angle
-
-            # 规范化到 (0, 360]
-            while next_angle <= 0:
-                next_angle += 360
-            while next_angle > 360:
-                next_angle -= 360
+            # 拉链模式：角度在 0 和 (180-angle) 之间交替
+            # tile 1: 0 → alternate_angle (逆时针转 angle°)
+            # tile 2: alternate_angle → 0 (顺时针转 angle°)
+            # tile 3: 0 → alternate_angle
+            # ...
+            if (i + 1) % 2 == 1:  # 奇数位置：1, 3, 5, ...
+                next_angle = alternate_angle
+            else:  # 偶数位置：2, 4, 6, ...
+                next_angle = 0.0
 
             tile_data = TileData(i + 1, angle=next_angle)
 
             # 添加SetSpeed事件
             tile_data.get_action_list(EventType.SET_SPEED).append(
-                SetSpeed("Bpm", to_bpm, 1.0)
+                SetSpeed("Bpm", display_bpm, 1.0)
             )
 
-            # 注意：拉链模式下，如果时间间隔很大，仍然需要Pause
-            # 但因为角度固定为base_angle，所以需要在计算中处理
-            # 实际上，如果interval很大，to_bpm会很小，这是允许的
-            # ADOFAI的BPM下限是有限制的，如果太低需要Pause
-
-            # 检查是否需要Pause（当时间间隔超过一拍时）
-            # 一拍时间 = 60/estimated_bpm
-            # 如果interval > 60/estimated_bpm，需要额外处理
-            # 但这里我们保持简化，让BPM自由变化
-
             tile_data_list.append(tile_data)
-            current_angle = next_angle
 
         return map_data
 

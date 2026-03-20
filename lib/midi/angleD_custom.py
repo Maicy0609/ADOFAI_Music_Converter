@@ -1,18 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-自定义夹角模式转换器 (Custom Angle Mode Converter)
-使用 angleData + SetSpeed + Pause 实现节奏控制
+拉链夹角模式转换器 (Zipper Angle Mode Converter)
+使用 angleData + SetSpeed 实现节奏控制
 
 核心原理：
-- 用户输入自定义夹角 θ（如15°）
-- 使用 angleData 存储角度序列，确保每个瓷砖之间的旋转角度固定为 θ
-- 角度计算公式：angle[i] = (angle[i-1] + 180 - θ) mod 360
-- 魔法数字 = 180/θ（用于BPM补偿）
-- 时间 = θ/180 × 60/BPM 秒
+- 用户输入夹角 θ（如15°）
+- 旋转角度固定为 θ，方向交替
+- angleData 序列：[0, 180-θ, 0, 180-θ, ...]
+- 例如 θ=15° 时：angleData = [0, 165, 0, 165, 0, 165, ...]
+- 时间公式：时间 = θ/180 × 60/BPM
+- 显示BPM = θ/180 × 60/时间
+
+旋转方向：
+- 从 0 到 (180-θ)：逆时针旋转 θ°
+- 从 (180-θ) 到 0：顺时针旋转 θ°
+- 形成锯齿/拉链形状
 
 特殊处理：
 - θ = 0°：不合法，拒绝（无法移动）
-- θ = 180°：直线，不需要额外角度调整
+- θ = 180°：直线，角度序列 [0, 0, 0, ...]
 """
 
 from typing import List, Optional, Tuple
@@ -27,7 +33,7 @@ from .common import (
 
 
 class AngleCustomConverter:
-    """自定义夹角模式转换器（使用angleData）"""
+    """拉链夹角模式转换器（使用angleData）"""
 
     # 最小有效夹角（度）
     MIN_ANGLE = 0.001
@@ -110,83 +116,61 @@ class AngleCustomConverter:
         map_data = MapData(use_angle_data=True)
         tile_data_list = map_data.tile_data_list
 
-        # 计算魔法数字
-        magic_number = self.get_magic_number(angle)
+        # 计算交替角度
+        # 拉链序列：[0, 180-angle, 0, 180-angle, ...]
+        # 例如 angle=15° 时：[0, 165, 0, 165, ...]
+        alternate_angle = 180.0 - angle
 
         # 添加起始瓷砖 (floor 0, 角度 = 0)
         tile_data_list.append(TileData(0, angle=0))
 
-        # 当前绝对角度
-        current_angle = 0.0
-
         for i, us_delay in enumerate(us_delay_list):
-            # 计算需要的BPM
+            # 计算时间（秒）
+            time_seconds = us_delay / 1000000.0
+            
+            # 计算显示BPM
             # 时间 = angle/180 × 60/BPM
-            # BPM = angle/180 × 60 × 1000000 / us_delay
-            # 但因为魔法数字的关系，实际显示的BPM需要除以magic_number
-            to_bpm = 60.0 * 1000 * 1000 / us_delay / magic_number
+            # BPM = angle/180 × 60/时间
+            display_bpm = angle / 180.0 * 60.0 / time_seconds
 
-            # 计算总旋转角度
-            # 总旋转角度 = 时间 × BPM / 60 × 180
-            #           = us_delay / 1000000 × to_bpm × magic_number / 60 × 180
-            #           = us_delay × to_bpm × magic_number / (60 × 1000000) × 180
-            total_rotate_angle = us_delay * to_bpm * magic_number / 60.0 / 1000000.0 * 180.0
-
-            # 计算需要的 Pause duration 和基础旋转角度
-            # 基础旋转角度必须在 (0, 360] 范围内
-            if total_rotate_angle > 360:
-                base_rotate_angle = total_rotate_angle % 360
-                if base_rotate_angle < 0.001:
-                    base_rotate_angle = 360
-                pause_beats = (total_rotate_angle - base_rotate_angle) / 180.0
-            else:
-                pause_beats = 0
-                base_rotate_angle = total_rotate_angle
-
-            # 计算下一个瓷砖的绝对角度
-            # 根据pyadofai的解释：
-            # rotation_angle = (prev_angle + 180 - curr_angle) mod 360
-            # 我们想要 rotation_angle = base_rotate_angle
-            # 所以：curr_angle = prev_angle + 180 - base_rotate_angle
-            next_angle = current_angle + 180.0 - base_rotate_angle
-
-            # 规范化到 (0, 360] 范围
-            while next_angle <= 0:
-                next_angle += 360
-            while next_angle > 360:
-                next_angle -= 360
+            # 拉链模式：角度在 0 和 (180-angle) 之间交替
+            # tile 1: 0 → alternate_angle (逆时针转 angle°)
+            # tile 2: alternate_angle → 0 (顺时针转 angle°)
+            # tile 3: 0 → alternate_angle
+            # ...
+            if (i + 1) % 2 == 1:  # 奇数位置：1, 3, 5, ...
+                next_angle = alternate_angle
+            else:  # 偶数位置：2, 4, 6, ...
+                next_angle = 0.0
 
             tile_data = TileData(i + 1, angle=next_angle)
 
             # 添加 SetSpeed 事件
             tile_data.get_action_list(EventType.SET_SPEED).append(
-                SetSpeed("Bpm", to_bpm, 1.0)
+                SetSpeed("Bpm", display_bpm, 1.0)
             )
 
-            # 如果需要 Pause 事件
-            if pause_beats > 0:
-                tile_data.get_action_list(EventType.PAUSE).append(Pause(pause_beats))
+            # 注意：拉链模式下旋转角度固定为 angle（≤ 180°）
+            # 如果时间间隔很长，display_bpm 会很小，但这是允许的
+            # 不需要 Pause 事件，因为旋转角度不会超过 360°
 
             tile_data_list.append(tile_data)
-
-            current_angle = next_angle
 
         return map_data
 
     @staticmethod
     def get_bpm_list(us_delay_list: List[int], angle: float = 15.0) -> List[float]:
         """
-        计算每个延迟对应的BPM值
+        计算每个延迟对应的显示BPM值
 
         Args:
             us_delay_list: 微秒延迟列表
             angle: 夹角度数
 
         Returns:
-            List[float]: BPM列表
+            List[float]: 显示BPM列表
         """
-        magic_number = AngleCustomConverter.get_magic_number(angle)
-        return [60.0 * 1000 * 1000 / us_delay / magic_number for us_delay in us_delay_list]
+        return [angle / 180.0 * 60.0 * 1000000.0 / us_delay for us_delay in us_delay_list]
 
     @staticmethod
     def calculate_base_bpm(us_delay_list: List[int], angle: float = 15.0) -> float:
@@ -206,6 +190,4 @@ class AngleCustomConverter:
 
 
 # 为了向后兼容，保留 PathDataConverter 别名
-# 注意：PathDataConverter 使用的是 pathData 格式，不是 angleData
-# 这个别名仅用于兼容旧代码
 PathDataConverter = AngleCustomConverter
