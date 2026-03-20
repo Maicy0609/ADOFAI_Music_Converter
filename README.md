@@ -10,7 +10,7 @@ This tool converts MIDI files or audio files into level files for [A Dance of Fi
 
 ### Input Sources
 - **MIDI File**: Extract beats from MIDI note events
-- **Audio File**: Auto-detect beats from audio waveform (WAV, MP3, etc.)
+- **Audio File**: Auto-detect beats from audio waveform (WAV, MP3, FLAC, VORBIS)
 
 ### Conversion Modes
 Both modes generate **identical absolute timing** for each beat!
@@ -52,10 +52,15 @@ ADOFAI_Music_Converter/
 ## Installation
 
 ```bash
-pip install mido numpy scipy
+pip install -r requirements.txt
 ```
 
-For non-WAV audio formats, install [ffmpeg](https://ffmpeg.org/).
+Or install manually:
+```bash
+pip install mido numpy scipy miniaudio
+```
+
+**Note**: Audio processing uses [miniaudio](https://github.com/irmen/pyminiaudio) library, no ffmpeg installation required.
 
 ## Usage
 
@@ -138,6 +143,11 @@ Example: 15° angle → Magic Number = 12
 
 ## Version History
 
+### v2.4.0
+- Use miniaudio instead of ffmpeg for audio decoding
+- Support more audio formats: MP3, FLAC, VORBIS
+- No system ffmpeg installation required, pure Python pip install
+
 ### v2.3.0
 - Added audio file input support
 - Merged apofai beat detection functionality
@@ -164,6 +174,7 @@ Example: 15° angle → Magic Number = 12
 - Original Java developer: [Luxus io](https://github.com/Luxusio/ADOFAI-Midi-Converter)
 - [pyadofai](https://github.com/TonyLimps/pyadofai) - angleData calculations
 - [apofai](https://github.com/sky-sama/apofai_main_console) - Audio beat detection reference
+- [pyminiaudio](https://github.com/irmen/pyminiaudio) - Audio decoding library
 
 ## License
 

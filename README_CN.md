@@ -10,7 +10,7 @@
 
 ### 输入源
 - **MIDI文件**：从MIDI音符事件提取节拍
-- **音频文件**：从音频波形自动检测节拍（支持WAV、MP3等）
+- **音频文件**：从音频波形自动检测节拍（支持WAV、MP3、FLAC、VORBIS）
 
 ### 转换模式
 两种模式生成的**拍子绝对时间完全相同**！
@@ -52,10 +52,15 @@ ADOFAI_Music_Converter/
 ## 安装依赖
 
 ```bash
-pip install mido numpy scipy
+pip install -r requirements.txt
 ```
 
-处理非WAV格式音频需要安装 [ffmpeg](https://ffmpeg.org/)。
+或者手动安装：
+```bash
+pip install mido numpy scipy miniaudio
+```
+
+**注意**：音频处理使用 [miniaudio](https://github.com/irmen/pyminiaudio) 库，无需安装 ffmpeg。
 
 ## 使用方法
 
@@ -138,6 +143,11 @@ python main.py
 
 ## 版本历史
 
+### v2.4.0
+- 使用 miniaudio 替代 ffmpeg 进行音频解码
+- 支持更多音频格式：MP3、FLAC、VORBIS
+- 无需系统安装 ffmpeg，纯 Python pip 安装即可
+
 ### v2.3.0
 - 新增音频文件输入支持
 - 合并apofai节拍检测功能
@@ -164,6 +174,7 @@ python main.py
 - 原版Java开发者：[Luxus io](https://github.com/Luxusio/ADOFAI-Midi-Converter)
 - [pyadofai](https://github.com/TonyLimps/pyadofai) - angleData计算参考
 - [apofai](https://github.com/sky-sama/apofai_main_console) - 音频节拍检测参考
+- [pyminiaudio](https://github.com/irmen/pyminiaudio) - 音频解码库
 
 ## 许可证
 
