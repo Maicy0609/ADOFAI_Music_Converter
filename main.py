@@ -279,42 +279,30 @@ def get_custom_angle() -> float:
             print(t('error.invalid_number'))
 
 
-def get_audio_params() -> tuple:
-    """获取音频检测参数"""
+def get_audio_params() -> float:
+    """获取音频检测参数 - 采样百分比"""
     print()
     print(t('ui.separator'))
     print(t('ui.audio_params_title'))
     print(t('ui.separator'))
-    print(t('ui.audio_params_desc'))
     print()
-    print(t('ui.smoothness_desc'))
-    print(t('ui.smoothness_example'))
-    print(t('ui.smoothness_prompt'), end='')
+    print(t('ui.sample_percent_desc'))
+    print(t('ui.sample_percent_example'))
+    print(t('ui.sample_percent_prompt'), end='')
 
-    smoothness_str = input().strip()
-    smoothness = 0.0
-    if smoothness_str:
+    percent_str = input().strip()
+    sample_percent = 100.0
+    if percent_str:
         try:
-            smoothness = float(smoothness_str)
-        except ValueError:
-            pass
-
-    print()
-    print(t('ui.threshold_desc'))
-    print(t('ui.threshold_example'))
-    print(t('ui.threshold_prompt'), end='')
-
-    threshold_str = input().strip()
-    threshold = 0.0
-    if threshold_str:
-        try:
-            threshold = float(threshold_str)
+            sample_percent = float(percent_str)
+            # 限制范围 1-100
+            sample_percent = max(1.0, min(100.0, sample_percent))
         except ValueError:
             pass
 
     print(t('ui.separator'))
 
-    return smoothness, threshold
+    return sample_percent
 
 
 # ============================================================================
@@ -413,8 +401,8 @@ def convert_audio(audio_path: str, mode: int) -> str:
     print()
     print(t('convert.sample_info', rate=processor.sample_rate, duration=processor.duration))
 
-    # 获取检测参数
-    smoothness, threshold = get_audio_params()
+    # 获取采样百分比参数
+    sample_percent = get_audio_params()
 
     # 检测节拍
     print()
@@ -424,9 +412,7 @@ def convert_audio(audio_path: str, mode: int) -> str:
     beat_times = detector.detect(
         energy_signal,
         processor.sample_rate,
-        smoothness,
-        threshold,
-        32767.0
+        sample_percent
     )
 
     if not beat_times:
