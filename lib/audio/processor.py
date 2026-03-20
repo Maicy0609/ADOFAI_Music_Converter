@@ -92,19 +92,27 @@ class AudioProcessor:
             if verbose:
                 print(f"Loading audio with miniaudio...")
 
-            # 使用 miniaudio 解码音频文件
-            # 强制转换为单声道、44100Hz 采样率
+            # 第一步：获取原始音频信息
+            info = miniaudio.get_file_info(path)
+            original_sample_rate = info.sample_rate
+            original_nchannels = info.nchannels
+
+            if verbose:
+                print(f"Original: {original_sample_rate} Hz, {original_nchannels} channels")
+
+            # 第二步：用原始采样率解码（参考 apofai，保留原始采样率）
             decoded = miniaudio.decode_file(
                 path,
                 output_format=miniaudio.SampleFormat.SIGNED16,
                 nchannels=1,
-                sample_rate=44100
+                sample_rate=original_sample_rate  # 使用原始采样率！
             )
 
-            # 设置采样率
+            # 设置采样率（保留原始值）
             self.sample_rate = decoded.sample_rate
 
-            # 转换为 numpy 数组，再转为 float64
+            # 转换为 numpy 数组
+            # 参考 apofai：原始样本数据
             self.samples = np.array(decoded.samples, dtype=np.float64)
 
             # 计算时长
