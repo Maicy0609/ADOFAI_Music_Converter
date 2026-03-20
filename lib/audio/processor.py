@@ -171,21 +171,29 @@ class AudioProcessor:
 
     def get_energy_signal(self) -> np.ndarray:
         """
-        获取能量信号（样本值的平方）
+        获取能量信号（完全参考 apofai 的实现）
+
+        apofai 原始逻辑：
+        y0 = np.array(all_samples)  # 原始样本
+        if y0.ndim == 2:
+            y0 = (y0[:,0]+y0[:,1])/2  # 立体声取平均
+        y1 = np.int32(y0)**2  # 平方，使用 int32 防止溢出
+        y1 = np.int16((y1/y1.max())*32767)  # 归一化到 int16
 
         Returns:
-            np.ndarray: 能量信号
+            np.ndarray: 能量信号（int16）
         """
         if self.samples is None:
             raise ValueError("No audio loaded")
 
-        # 计算能量（平方）
-        energy = self.samples ** 2
+        # 参考 apofai：使用 int32 计算平方，防止溢出
+        y0 = self.samples
+        y1 = np.int32(y0) ** 2
 
-        # 归一化到int16范围
-        energy = energy / energy.max() * 32767
+        # 归一化到 int16 范围
+        y1 = np.int16((y1 / y1.max()) * 32767)
 
-        return energy.astype(np.int16)
+        return y1
 
     def get_time_axis(self) -> np.ndarray:
         """

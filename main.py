@@ -279,30 +279,65 @@ def get_custom_angle() -> float:
             print(t('error.invalid_number'))
 
 
-def get_audio_params() -> float:
-    """获取音频检测参数 - 采样百分比"""
+def get_audio_params() -> dict:
+    """
+    获取音频检测参数（参考 apofai 的参数）
+
+    参数说明：
+    - smoothness: 平滑度（-5 到 5），值越小采音强度越高，按键越密集
+    - height_min: 阈值最小值（0-32767），低于此值的峰值不采集
+    - height_max: 阈值最大值（0-32767），高于此值的峰值不采集
+    """
     print()
     print(t('ui.separator'))
     print(t('ui.audio_params_title'))
     print(t('ui.separator'))
     print()
-    print(t('ui.sample_percent_desc'))
-    print(t('ui.sample_percent_example'))
-    print(t('ui.sample_percent_prompt'), end='')
+    print(t('ui.smoothness_desc'))
+    print(t('ui.smoothness_example'))
+    print()
 
-    percent_str = input().strip()
-    sample_percent = 100.0
-    if percent_str:
+    # 获取平滑度
+    smoothness = 0.0
+    print(t('ui.smoothness_prompt'), end='')
+    smoothness_str = input().strip()
+    if smoothness_str:
         try:
-            sample_percent = float(percent_str)
-            # 限制范围 1-100
-            sample_percent = max(1.0, min(100.0, sample_percent))
+            smoothness = float(smoothness_str)
+            # 限制范围 -5 到 5
+            smoothness = max(-5.0, min(5.0, smoothness))
+        except ValueError:
+            pass
+
+    # 获取阈值最小值
+    height_min = 0.0
+    print(t('ui.height_min_prompt'), end='')
+    height_min_str = input().strip()
+    if height_min_str:
+        try:
+            height_min = float(height_min_str)
+            height_min = max(0.0, min(32767.0, height_min))
+        except ValueError:
+            pass
+
+    # 获取阈值最大值
+    height_max = 32767.0
+    print(t('ui.height_max_prompt'), end='')
+    height_max_str = input().strip()
+    if height_max_str:
+        try:
+            height_max = float(height_max_str)
+            height_max = max(0.0, min(32767.0, height_max))
         except ValueError:
             pass
 
     print(t('ui.separator'))
 
-    return sample_percent
+    return {
+        'smoothness': smoothness,
+        'height_min': height_min,
+        'height_max': height_max
+    }
 
 
 # ============================================================================
@@ -401,8 +436,8 @@ def convert_audio(audio_path: str, mode: int) -> str:
     print()
     print(t('convert.sample_info', rate=processor.sample_rate, duration=processor.duration))
 
-    # 获取采样百分比参数
-    sample_percent = get_audio_params()
+    # 获取音频检测参数（参考 apofai）
+    params = get_audio_params()
 
     # 检测节拍
     print()
@@ -412,7 +447,9 @@ def convert_audio(audio_path: str, mode: int) -> str:
     beat_times = detector.detect(
         energy_signal,
         processor.sample_rate,
-        sample_percent
+        smoothness=params['smoothness'],
+        height_min=params['height_min'],
+        height_max=params['height_max']
     )
 
     if not beat_times:
