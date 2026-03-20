@@ -1,0 +1,82 @@
+{
+    "app": {
+        "title": "ADOFAI MIDI 转换器",
+        "version": "Python 轻量化版本 v2.1.0",
+        "original_author": "原版开发者: Luxus io (Java)",
+        "python_rewrite": "Python重写版本 | 简体中文本地化",
+        "youtube": "YouTube: https://www.youtube.com/c/Luxusio",
+        "github": "GitHub:  https://github.com/Luxusio/ADOFAI-Midi-Converter"
+    },
+    "ui": {
+        "separator": "------------------------------------------------------------",
+        "language_title": "语言选择",
+        "file_prompt": "请输入MIDI文件路径",
+        "file_hint": "提示: 可以直接将文件拖入此窗口",
+        "file_input": "文件路径: ",
+        "mode_title": "转换模式选择",
+        "mode_rw": "1. RW模式 (pathData)",
+        "mode_rw_desc1": "   - 使用 SetSpeed + Twirl 事件",
+        "mode_rw_desc2": "   - pathData 为 RW 模式 (0°, 165°, 0°, 165°...)",
+        "mode_rw_desc3": "   - 兼容性好，适合大多数情况",
+        "mode_angle": "2. angleData模式",
+        "mode_angle_desc1": "   - 纯角度控制，不依赖 SetSpeed 和 Twirl",
+        "mode_angle_desc2": "   - 支持任意浮点数角度",
+        "mode_angle_desc3": "   - 更精确的节奏控制",
+        "mode_prompt": "请选择模式 [1/2] (默认 1): ",
+        "track_title": "轨道选择",
+        "track_status": "当前轨道状态 (共 {count} 个轨道):",
+        "track_enabled": "启用",
+        "track_disabled": "禁用",
+        "track_toggle": "输入轨道编号来切换启用/禁用状态",
+        "track_continue": "输入 -1 完成选择并继续",
+        "track_input": "请输入: ",
+        "track_set": "轨道 {num} 已设为: {status}",
+        "track_range_error": "错误: 请输入 0 到 {max} 之间的数字，或 -1 退出",
+        "octave_title": "八度偏移设置",
+        "octave_desc": "说明: 调整音符的音高范围",
+        "octave_recommend": "推荐值: -4 到 -2 之间",
+        "octave_prompt": "八度偏移 (默认 -4): ",
+        "bpm_title": "基准 BPM 设置",
+        "bpm_desc": "说明: 在 angleData 模式下，基准 BPM 决定角度计算",
+        "bpm_auto": "留空则自动使用中位数 BPM",
+        "bpm_prompt": "基准 BPM (留空自动计算): ",
+        "select_complete": "选择完成，按回车键继续..."
+    },
+    "error": {
+        "mido_required": "错误: 请先安装mido库",
+        "run_pip": "运行: pip install mido",
+        "no_file_path": "错误: 未提供文件路径",
+        "file_not_found": "错误: 文件不存在: {path}",
+        "invalid_mode": "错误: 请输入 1 或 2",
+        "invalid_number": "错误: 请输入有效的数字",
+        "invalid_integer": "错误: 请输入有效的整数",
+        "bpm_positive": "错误: BPM 必须大于 0"
+    },
+    "convert": {
+        "title": "开始转换...",
+        "loading": "正在加载: {path}",
+        "step1": "步骤 1/3: 解析MIDI旋律...",
+        "melody_found": "  找到 {count} 个旋律事件",
+        "step2": "步骤 2/3: 计算时间延迟...",
+        "nodes_generated": "  生成 {count} 个时间节点",
+        "step3": "步骤 3/3: 生成ADOFAI地图...",
+        "using_rw_mode": "  使用 RW 模式 (pathData + SetSpeed + Twirl)",
+        "using_angle_mode": "  使用 angleData模式 (纯角度控制)",
+        "tiles_generated": "  地图包含 {count} 个瓷砖",
+        "complete": "转换完成!",
+        "output_file": "输出文件: {path}",
+        "analyzing": "正在分析文件: {name}",
+        "median_bpm": "使用中位数 BPM 作为基准 (RW模式): {bpm:.2f}"
+    },
+    "track_info": {
+        "title": "轨道信息",
+        "track_size": "轨道 {id}: 大小 = {size} 事件"
+    },
+    "tempo": {
+        "us_per_tick": "{tick} tempo {value}us / tick"
+    },
+    "exit": {
+        "user_cancel": "用户取消操作",
+        "press_enter": "按回车键退出..."
+    }
+}

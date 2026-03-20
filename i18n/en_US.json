@@ -1,0 +1,82 @@
+{
+    "app": {
+        "title": "ADOFAI MIDI Converter",
+        "version": "Python Lightweight Version v2.1.0",
+        "original_author": "Original Developer: Luxus io (Java)",
+        "python_rewrite": "Python Rewrite | English Localization",
+        "youtube": "YouTube: https://www.youtube.com/c/Luxusio",
+        "github": "GitHub:  https://github.com/Luxusio/ADOFAI-Midi-Converter"
+    },
+    "ui": {
+        "separator": "------------------------------------------------------------",
+        "language_title": "Language Selection",
+        "file_prompt": "Please enter MIDI file path",
+        "file_hint": "Tip: You can drag and drop the file into this window",
+        "file_input": "File path: ",
+        "mode_title": "Conversion Mode Selection",
+        "mode_rw": "1. RW Mode (pathData)",
+        "mode_rw_desc1": "   - Uses SetSpeed + Twirl events",
+        "mode_rw_desc2": "   - pathData is RW pattern (0°, 165°, 0°, 165°...)",
+        "mode_rw_desc3": "   - Good compatibility, suitable for most cases",
+        "mode_angle": "2. angleData Mode",
+        "mode_angle_desc1": "   - Pure angle control, no SetSpeed or Twirl needed",
+        "mode_angle_desc2": "   - Supports arbitrary floating-point angles",
+        "mode_angle_desc3": "   - More precise rhythm control",
+        "mode_prompt": "Select mode [1/2] (default 1): ",
+        "track_title": "Track Selection",
+        "track_status": "Current track status ({count} tracks total):",
+        "track_enabled": "enabled",
+        "track_disabled": "disabled",
+        "track_toggle": "Enter track number to toggle enable/disable status",
+        "track_continue": "Enter -1 to finish selection and continue",
+        "track_input": "Please enter: ",
+        "track_set": "Track {num} set to: {status}",
+        "track_range_error": "Error: Please enter a number between 0 and {max}, or -1 to exit",
+        "octave_title": "Octave Offset Settings",
+        "octave_desc": "Description: Adjusts the pitch range of notes",
+        "octave_recommend": "Recommended value: between -4 and -2",
+        "octave_prompt": "Octave offset (default -4): ",
+        "bpm_title": "Base BPM Settings",
+        "bpm_desc": "Description: In angleData mode, base BPM determines angle calculation",
+        "bpm_auto": "Leave empty to auto-calculate using median BPM",
+        "bpm_prompt": "Base BPM (leave empty for auto): ",
+        "select_complete": "Selection complete, press Enter to continue..."
+    },
+    "error": {
+        "mido_required": "Error: mido library is required",
+        "run_pip": "Run: pip install mido",
+        "no_file_path": "Error: No file path provided",
+        "file_not_found": "Error: File not found: {path}",
+        "invalid_mode": "Error: Please enter 1 or 2",
+        "invalid_number": "Error: Please enter a valid number",
+        "invalid_integer": "Error: Please enter a valid integer",
+        "bpm_positive": "Error: BPM must be greater than 0"
+    },
+    "convert": {
+        "title": "Starting conversion...",
+        "loading": "Loading: {path}",
+        "step1": "Step 1/3: Parsing MIDI melody...",
+        "melody_found": "  Found {count} melody events",
+        "step2": "Step 2/3: Calculating time delays...",
+        "nodes_generated": "  Generated {count} time nodes",
+        "step3": "Step 3/3: Generating ADOFAI map...",
+        "using_rw_mode": "  Using RW Mode (pathData + SetSpeed + Twirl)",
+        "using_angle_mode": "  Using angleData Mode (pure angle control)",
+        "tiles_generated": "  Map contains {count} tiles",
+        "complete": "Conversion Complete!",
+        "output_file": "Output file: {path}",
+        "analyzing": "Analyzing file: {name}",
+        "median_bpm": "Using median BPM as base (RW mode): {bpm:.2f}"
+    },
+    "track_info": {
+        "title": "Track Information",
+        "track_size": "Track {id}: Size = {size} events"
+    },
+    "tempo": {
+        "us_per_tick": "{tick} tempo {value}us / tick"
+    },
+    "exit": {
+        "user_cancel": "User cancelled operation",
+        "press_enter": "Press Enter to exit..."
+    }
+}
