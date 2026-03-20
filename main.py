@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 """
 ADOFAI Music Converter - Python版本
-将MIDI文件转换为A Dance of Fire and Ice的谱面文件
+将MIDI或音频文件转换为A Dance of Fire and Ice的谱面文件
 
-支持两种模式：
+输入源：
+- MIDI文件：从音符事件提取节拍
+- 音频文件：从波形自动检测节拍
+
+转换模式：
 1. angleData模式 - 纯角度控制，固定基准BPM
-2. 拉链夹角模式 - 使用 angleData + SetSpeed，可自定义夹角
+2. 拉链夹角模式 - 固定角度，动态BPM调整
+
+核心原则：两种模式生成的拍子绝对时间完全相同！
 
 作者: 基于 Luxus io 的Java版本重写
 GitHub: https://github.com/Luxusio/ADOFAI-Midi-Converter
@@ -21,17 +27,43 @@ sys.path.insert(0, PROJECT_ROOT)
 # 导入i18n模块
 from i18n.i18n import t, set_language, select_language
 
-# 导入MIDI转换模块
-from lib.midi.common import MidiParser, MapData
-from lib.midi.angleD import AngleDataConverter
-from lib.midi.angleD_custom import AngleCustomConverter
+# ============================================================================
+# 依赖检查
+# ============================================================================
 
+# 检查numpy
+try:
+    import numpy as np
+except ImportError:
+    print("Error: numpy library is required")
+    print("Run: pip install numpy")
+    sys.exit(1)
+
+# 检查scipy（音频处理需要）
+try:
+    import scipy
+except ImportError:
+    print("Error: scipy library is required for audio processing")
+    print("Run: pip install scipy")
+    sys.exit(1)
+
+# 检查mido（MIDI处理需要）
 try:
     from mido import MidiFile
 except ImportError:
-    print("Error: mido library is required")
+    print("Error: mido library is required for MIDI processing")
     print("Run: pip install mido")
     sys.exit(1)
+
+# 导入MIDI转换模块
+from lib.midi.common import MidiParser
+from lib.midi.angleD import AngleDataConverter
+from lib.midi.angleD_custom import AngleCustomConverter
+
+# 导入音频处理模块
+from lib.audio.processor import AudioProcessor
+from lib.audio.detector import BeatDetector
+from lib.audio.converter import AudioAngleConverter, AudioZipperConverter
 
 
 # ============================================================================
@@ -53,10 +85,40 @@ def print_banner() -> None:
     print()
 
 
-def get_file_path() -> str:
-    """获取文件路径，支持拖入文件"""
+def select_input_source() -> int:
+    """选择输入源"""
+    print()
     print(t('ui.separator'))
-    print(t('ui.file_prompt'))
+    print(t('ui.source_title'))
+    print(t('ui.separator'))
+    print(t('ui.source_midi'))
+    print(t('ui.source_midi_desc'))
+    print()
+    print(t('ui.source_audio'))
+    print(t('ui.source_audio_desc'))
+    print(t('ui.separator'))
+
+    while True:
+        try:
+            choice = input(t('ui.source_prompt')).strip()
+            if choice == "" or choice == "1":
+                return 1
+            elif choice == "2":
+                return 2
+            else:
+                print(t('error.invalid_source'))
+        except ValueError:
+            print(t('error.invalid_number'))
+
+
+def get_file_path(source: int) -> str:
+    """获取文件路径"""
+    print()
+    print(t('ui.separator'))
+    if source == 1:
+        print(t('ui.file_prompt_midi'))
+    else:
+        print(t('ui.file_prompt_audio'))
     print(t('ui.file_hint'))
     print(t('ui.separator'))
 
@@ -151,7 +213,7 @@ def get_octave_offset() -> int:
 
 
 def get_base_bpm() -> float:
-    """获取基准 BPM (仅 angleData 模式)"""
+    """获取基准 BPM"""
     print()
     print(t('ui.separator'))
     print(t('ui.bpm_title'))
@@ -164,7 +226,7 @@ def get_base_bpm() -> float:
         try:
             bpm = input(t('ui.bpm_prompt')).strip()
             if bpm == "":
-                return None  # 表示自动计算
+                return None
             bpm_val = float(bpm)
             if bpm_val <= 0:
                 print(t('error.bpm_positive'))
@@ -217,10 +279,50 @@ def get_custom_angle() -> float:
             print(t('error.invalid_number'))
 
 
-def convert_midi_to_adofai(midi_path: str, disable: list, octave_offset: int,
-                           mode: int, base_bpm: float = None,
-                           custom_angle: float = 15.0) -> str:
-    """转换MIDI文件到ADOFAI格式"""
+def get_audio_params() -> tuple:
+    """获取音频检测参数"""
+    print()
+    print(t('ui.separator'))
+    print(t('ui.audio_params_title'))
+    print(t('ui.separator'))
+    print(t('ui.audio_params_desc'))
+    print()
+    print(t('ui.smoothness_desc'))
+    print(t('ui.smoothness_example'))
+    print(t('ui.smoothness_prompt'), end='')
+
+    smoothness_str = input().strip()
+    smoothness = 0.0
+    if smoothness_str:
+        try:
+            smoothness = float(smoothness_str)
+        except ValueError:
+            pass
+
+    print()
+    print(t('ui.threshold_desc'))
+    print(t('ui.threshold_example'))
+    print(t('ui.threshold_prompt'), end='')
+
+    threshold_str = input().strip()
+    threshold = 0.0
+    if threshold_str:
+        try:
+            threshold = float(threshold_str)
+        except ValueError:
+            pass
+
+    print(t('ui.separator'))
+
+    return smoothness, threshold
+
+
+# ============================================================================
+# 转换函数
+# ============================================================================
+
+def convert_midi(midi_path: str, mode: int) -> str:
+    """转换MIDI文件"""
     print()
     print(t('ui.separator'))
     print(t('convert.title'))
@@ -229,8 +331,23 @@ def convert_midi_to_adofai(midi_path: str, disable: list, octave_offset: int,
     print(t('convert.loading', path=midi_path))
     midi_file = MidiFile(midi_path)
 
-    parser = MidiParser()
+    # 显示轨道信息
+    print()
+    print(t('ui.separator'))
+    print(t('track_info.title'))
+    print(t('ui.separator'))
+    for i, track in enumerate(midi_file.tracks):
+        print(t('track_info.track_size', id=i, size=len(track)))
 
+    # 选择轨道
+    disable = select_tracks(len(midi_file.tracks))
+
+    # 获取八度偏移
+    octave_offset = get_octave_offset()
+
+    # 解析MIDI
+    parser = MidiParser()
+    print()
     print(t('convert.step1'))
     melody_list = parser.parse_to_melody_list(midi_file, disable)
     print(t('convert.melody_found', count=len(melody_list)))
@@ -241,8 +358,13 @@ def convert_midi_to_adofai(midi_path: str, disable: list, octave_offset: int,
 
     print(t('convert.step3'))
 
+    # 根据模式获取额外参数
+    base_bpm = None
+    custom_angle = 15.0
+
     if mode == 1:
-        # angleData模式 - 固定基准BPM
+        base_bpm = get_base_bpm()
+        print()
         print(t('convert.using_angle_mode'))
         converter = AngleDataConverter()
         map_data = converter.convert(us_delay_list, base_bpm)
@@ -253,11 +375,11 @@ def convert_midi_to_adofai(midi_path: str, disable: list, octave_offset: int,
 
         mode_suffix = "_angle"
     else:
-        # 拉链夹角模式
+        custom_angle = get_custom_angle()
+        print()
         print(t('convert.using_zipper_mode'))
         converter = AngleCustomConverter(base_angle=custom_angle)
         map_data = converter.convert(us_delay_list)
-
         mode_suffix = f"_zipper_{int(custom_angle) if custom_angle == int(custom_angle) else custom_angle}"
 
     print(t('convert.tiles_generated', count=len(map_data.tile_data_list)))
@@ -274,6 +396,90 @@ def convert_midi_to_adofai(midi_path: str, disable: list, octave_offset: int,
     return out_path
 
 
+def convert_audio(audio_path: str, mode: int) -> str:
+    """转换音频文件"""
+    print()
+    print(t('ui.separator'))
+    print(t('convert.title'))
+    print(t('ui.separator'))
+
+    # 加载音频
+    print(t('convert.loading', path=audio_path))
+    processor = AudioProcessor()
+    if not processor.load(audio_path):
+        print(t('error.file_load_failed'))
+        return None
+
+    print()
+    print(t('convert.sample_info', rate=processor.sample_rate, duration=processor.duration))
+
+    # 获取检测参数
+    smoothness, threshold = get_audio_params()
+
+    # 检测节拍
+    print()
+    print(t('convert.step1_audio'))
+    detector = BeatDetector()
+    energy_signal = processor.get_energy_signal()
+    beat_times = detector.detect(
+        energy_signal,
+        processor.sample_rate,
+        smoothness,
+        threshold,
+        32767.0
+    )
+
+    if not beat_times:
+        print(t('error.no_beats_detected'))
+        return None
+
+    print(t('convert.beats_found', count=len(beat_times)))
+
+    # 估计BPM
+    estimated_bpm = BeatDetector.estimate_bpm(beat_times)
+    print(t('ui.bpm_estimated', bpm=estimated_bpm))
+
+    print(t('convert.step3'))
+
+    # 根据模式转换
+    if mode == 1:
+        # 获取或确认BPM
+        print()
+        base_bpm = get_base_bpm()
+        if base_bpm is None:
+            base_bpm = estimated_bpm
+
+        print()
+        print(t('convert.using_angle_mode'))
+        converter = AudioAngleConverter(base_bpm=base_bpm)
+        map_data = converter.convert(beat_times, estimated_bpm)
+        mode_suffix = "_angle"
+    else:
+        custom_angle = get_custom_angle()
+        print()
+        print(t('convert.using_zipper_mode'))
+        converter = AudioZipperConverter(base_angle=custom_angle)
+        map_data = converter.convert(beat_times, estimated_bpm)
+        mode_suffix = f"_zipper_{int(custom_angle) if custom_angle == int(custom_angle) else custom_angle}"
+
+    print(t('convert.tiles_generated', count=len(map_data.tile_data_list)))
+
+    # 生成输出路径
+    idx = audio_path.rfind('.')
+    if idx != -1:
+        out_path = audio_path[:idx] + mode_suffix + ".adofai"
+    else:
+        out_path = audio_path + mode_suffix + ".adofai"
+
+    map_data.save(out_path)
+
+    return out_path
+
+
+# ============================================================================
+# 主函数
+# ============================================================================
+
 def main() -> None:
     """主函数"""
     # 选择语言
@@ -283,61 +489,38 @@ def main() -> None:
     print_banner()
 
     try:
-        midi_path = get_file_path()
+        # 选择输入源
+        source = select_input_source()
 
-        if not midi_path:
+        # 获取文件路径
+        file_path = get_file_path(source)
+
+        if not file_path:
             print(t('error.no_file_path'))
             input(t('exit.press_enter'))
             return
 
-        if not os.path.exists(midi_path):
-            print(t('error.file_not_found', path=midi_path))
+        if not os.path.exists(file_path):
+            print(t('error.file_not_found', path=file_path))
             input(t('exit.press_enter'))
             return
-
-        print()
-        print(t('convert.analyzing', name=os.path.basename(midi_path)))
-        midi_file = MidiFile(midi_path)
-
-        print()
-        print(t('ui.separator'))
-        print(t('track_info.title'))
-        print(t('ui.separator'))
-        for i, track in enumerate(midi_file.tracks):
-            print(t('track_info.track_size', id=i, size=len(track)))
 
         # 选择转换模式
         mode = select_mode()
 
-        # 选择轨道
-        disable = select_tracks(len(midi_file.tracks))
-
-        # 获取八度偏移
-        octave_offset = get_octave_offset()
-
-        # 根据模式获取额外参数
-        base_bpm = None
-        custom_angle = 15.0
-
-        if mode == 1:
-            # angleData模式需要基准BPM
-            base_bpm = get_base_bpm()
+        # 根据输入源执行转换
+        if source == 1:
+            out_path = convert_midi(file_path, mode)
         else:
-            # 拉链夹角模式需要夹角
-            custom_angle = get_custom_angle()
+            out_path = convert_audio(file_path, mode)
 
-        # 执行转换
-        out_path = convert_midi_to_adofai(
-            midi_path, disable, octave_offset, mode,
-            base_bpm, custom_angle
-        )
-
-        print()
-        print(t('ui.separator'))
-        print(t('convert.complete'))
-        print(t('ui.separator'))
-        print(t('convert.output_file', path=out_path))
-        print()
+        if out_path:
+            print()
+            print(t('ui.separator'))
+            print(t('convert.complete'))
+            print(t('ui.separator'))
+            print(t('convert.output_file', path=out_path))
+            print()
 
     except KeyboardInterrupt:
         print()
