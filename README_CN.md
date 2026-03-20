@@ -6,7 +6,7 @@
 
 ## 概述
 
-本工具可将MIDI文件转换为《[冰与火之舞 (A Dance of Fire and Ice)](https://store.steampowered.com/app/977950/A_Dance_of_Fire_and_Ice/)》的可玩谱面文件。支持两种转换模式，以适应不同的使用场景和精度需求。
+本工具可将MIDI文件转换为《[冰与火之舞 (A Dance of Fire and Ice)](https://store.steampowered.com/app/977950/A_Dance_of_Fire_and_Ice/)》的谱面文件。支持两种转换模式。
 
 ## 功能特点
 
@@ -149,9 +149,9 @@ angleData模式使用直接角度控制：
 
 本项目严格遵循以下命名规范：
 
-- **ADOFAI** - 必须大写（"A Dance of Fire and Ice"的缩写）
-- **pathData** - 驼峰命名，首字母小写
-- **angleData** - 驼峰命名，首字母小写
+- **ADOFAI** - 
+- **pathData** - 
+- **angleData** - 
 
 ## 版本历史
 
