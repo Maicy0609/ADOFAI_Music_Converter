@@ -3,7 +3,7 @@
 音频处理器
 负责加载 WAV 音频文件并预处理
 
-只支持 WAV 格式（参考 apofai 使用 scipy.io.wavfile）
+只支持 WAV 格式
 """
 
 import os
@@ -60,7 +60,7 @@ class AudioProcessor:
                 print(f"Error: Failed to read WAV file: {e}")
             return False
 
-        # 转换为单声道（参考 apofai）
+        # 转换为单声道
         if data.ndim == 2:
             data = np.mean(data, axis=1)
 
@@ -83,7 +83,7 @@ class AudioProcessor:
 
     def get_energy_signal(self) -> np.ndarray:
         """
-        获取能量信号（完全参考 apofai 的实现）
+        获取能量信号
 
         Returns:
             np.ndarray: 能量信号（int16）
@@ -91,20 +91,11 @@ class AudioProcessor:
         if self.samples is None:
             raise ValueError("No audio loaded")
 
-        # 参考 apofai：使用 int32 计算平方，防止溢出
         y0 = self.samples
-        
-        # 调试信息
-        print(f"  样本数: {len(y0)}, 范围: [{y0.min():.1f}, {y0.max():.1f}]")
-        
         y1 = np.int32(y0) ** 2
 
-        # 归一化到 int16 范围
         y1_max = y1.max()
-        print(f"  能量最大值: {y1_max}")
-        
         if y1_max == 0:
-            print("  警告: 音频是静音！")
             return np.zeros(len(y1), dtype=np.int16)
         
         y1 = np.int16((y1 / y1_max) * 32767)

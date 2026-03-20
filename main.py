@@ -281,10 +281,9 @@ def get_custom_angle() -> float:
 
 def get_audio_params() -> dict:
     """
-    获取音频检测参数（参考 apofai 的参数）
+    获取音频检测参数
 
     参数说明：
-    - smoothness: 平滑度（-5 到 5），值越小采音强度越高，按键越密集
     - height_min: 阈值最小值（0-32767），低于此值的峰值不采集
     - height_max: 阈值最大值（0-32767），高于此值的峰值不采集
     """
@@ -293,20 +292,6 @@ def get_audio_params() -> dict:
     print(t('ui.audio_params_title'))
     print(t('ui.separator'))
     print()
-    print(t('ui.smoothness_desc'))
-    print(t('ui.smoothness_example'))
-    print()
-
-    # 获取平滑度（参考 apofai：允许任意值，不限制范围）
-    smoothness = 0.0
-    print(t('ui.smoothness_prompt'), end='')
-    smoothness_str = input().strip()
-    if smoothness_str:
-        try:
-            smoothness = float(smoothness_str)
-            # apofai 原版不限制范围，允许 -100 甚至更小的值
-        except ValueError:
-            pass
 
     # 获取阈值最小值
     height_min = 0.0
@@ -333,7 +318,6 @@ def get_audio_params() -> dict:
     print(t('ui.separator'))
 
     return {
-        'smoothness': smoothness,
         'height_min': height_min,
         'height_max': height_max
     }
@@ -446,7 +430,6 @@ def convert_audio(audio_path: str, mode: int) -> str:
     beat_times = detector.detect(
         energy_signal,
         processor.sample_rate,
-        smoothness=params['smoothness'],
         height_min=params['height_min'],
         height_max=params['height_max']
     )
