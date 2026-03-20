@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 音频处理器
-负责加载音频文件并预处理
+负责加载 WAV 音频文件并预处理
 
-支持格式：
-- WAV, MP3, FLAC, VORBIS (通过 miniaudio 解码)
-- WAV 也支持通过 scipy 直接读取
+只支持 WAV 格式（参考 apofai 使用 scipy.io.wavfile）
 """
 
 import os
@@ -19,14 +17,9 @@ except ImportError:
     print("Run: pip install scipy")
     exit(1)
 
-try:
-    import miniaudio
-except ImportError:
-    miniaudio = None  # type: ignore
-
 
 class AudioProcessor:
-    """音频处理器"""
+    """音频处理器（只支持 WAV）"""
 
     def __init__(self):
         self.sample_rate: Optional[int] = None
@@ -37,10 +30,10 @@ class AudioProcessor:
 
     def load(self, path: str, verbose: bool = True) -> bool:
         """
-        加载音频文件
+        加载 WAV 音频文件
 
         Args:
-            path: 音频文件路径
+            path: WAV 文件路径
             verbose: 是否输出详细信息
 
         Returns:
@@ -54,106 +47,12 @@ class AudioProcessor:
         # 检查文件扩展名
         ext = os.path.splitext(path)[1].lower()
 
-        # WAV 文件优先使用 scipy 读取（和 apofai 一样，对中文路径支持更好）
-        if ext == '.wav':
-            if self._load_wav_with_scipy(path, verbose):
-                return True
-            # scipy 失败，尝试 miniaudio
-            if miniaudio is not None:
-                return self._load_with_miniaudio(path, ext, verbose)
-            return False
-
-        # 非 WAV 格式使用 miniaudio
-        if miniaudio is not None:
-            return self._load_with_miniaudio(path, ext, verbose)
-        
-        # 无法处理
-        if verbose:
-            print(f"Error: Unsupported audio format '{ext}'")
-            print("Install miniaudio for MP3/FLAC/VORBIS support: pip install miniaudio")
-        return False
-
-    def _load_with_miniaudio(self, path: str, ext: str, verbose: bool = True) -> bool:
-        """
-        使用 miniaudio 加载音频文件（支持 WAV, MP3, FLAC, VORBIS）
-
-        Args:
-            path: 音频文件路径
-            ext: 文件扩展名
-            verbose: 是否输出详细信息
-
-        Returns:
-            bool: 是否加载成功
-        """
-        supported_formats = ('.wav', '.mp3', '.flac', '.ogg', '.vorbis')
-        
-        if ext not in supported_formats:
+        if ext != '.wav':
             if verbose:
                 print(f"Error: Unsupported audio format '{ext}'")
-                print(f"Supported formats: {', '.join(supported_formats)}")
+                print("Only WAV format is supported")
             return False
 
-        try:
-            if verbose:
-                print(f"Loading audio with miniaudio...")
-
-            # 第一步：获取原始音频信息
-            info = miniaudio.get_file_info(path)
-            original_sample_rate = info.sample_rate
-            original_nchannels = info.nchannels
-
-            if verbose:
-                print(f"Original: {original_sample_rate} Hz, {original_nchannels} channels")
-
-            # 第二步：用原始采样率解码（参考 apofai，保留原始采样率）
-            decoded = miniaudio.decode_file(
-                path,
-                output_format=miniaudio.SampleFormat.SIGNED16,
-                nchannels=1,
-                sample_rate=original_sample_rate  # 使用原始采样率！
-            )
-
-            # 设置采样率（保留原始值）
-            self.sample_rate = decoded.sample_rate
-
-            # 转换为 numpy 数组
-            # 参考 apofai：原始样本数据
-            self.samples = np.array(decoded.samples, dtype=np.float64)
-
-            # 计算时长
-            self.duration = decoded.duration
-
-            # 保存文件信息
-            self.file_path = path
-            self.file_name = os.path.basename(path)
-
-            if verbose:
-                print(f"Sample rate: {self.sample_rate} Hz")
-                print(f"Total samples: {len(self.samples)}")
-                print(f"Duration: {self.duration:.2f} seconds")
-
-            return True
-
-        except miniaudio.DecodeError as e:
-            if verbose:
-                print(f"Error: Failed to decode audio file: {e}")
-            return False
-        except Exception as e:
-            if verbose:
-                print(f"Error: Failed to load audio: {e}")
-            return False
-
-    def _load_wav_with_scipy(self, path: str, verbose: bool = True) -> bool:
-        """
-        使用 scipy 读取 WAV 文件（回退方案）
-
-        Args:
-            path: WAV 文件路径
-            verbose: 是否输出详细信息
-
-        Returns:
-            bool: 是否加载成功
-        """
         try:
             self.sample_rate, data = wav.read(path)
         except Exception as e:
@@ -161,11 +60,11 @@ class AudioProcessor:
                 print(f"Error: Failed to read WAV file: {e}")
             return False
 
-        # 转换为单声道
+        # 转换为单声道（参考 apofai）
         if data.ndim == 2:
             data = np.mean(data, axis=1)
 
-        # 转换为 float64
+        # 保存原始样本数据
         self.samples = data.astype(np.float64)
 
         # 计算时长

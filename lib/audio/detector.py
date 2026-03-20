@@ -75,8 +75,15 @@ class BeatDetector:
         # FFT 卷积（参考 apofai 使用 int32）
         y2 = self._convolve_fft(np.int32(energy_signal), gaussian_kernel)
 
-        # 归一化到 int16 范围
-        y2 = np.int16((y2 / y2.max()) * 32767)
+        # 归一化到 int16 范围（修复除零错误）
+        y2_max = y2.max()
+        if y2_max == 0 or np.isnan(y2_max) or np.isinf(y2_max):
+            # 全零信号，返回空列表
+            self.beat_times = []
+            self.smoothed_signal = np.zeros(len(y2), dtype=np.int16)
+            return self.beat_times
+
+        y2 = np.int16((y2 / y2_max) * 32767)
         self.smoothed_signal = y2
 
         # 峰值检测（完全参考 apofai）
@@ -155,7 +162,7 @@ def detect_beats(
     Args:
         energy_signal: 能量信号
         sample_rate: 采样率
-        smoothness: 平滑度参数（-5 到 5）
+        smoothness: 平滑度参数（无范围限制）
         height_min: 阈值最小值
         height_max: 阈值最大值
 
