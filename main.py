@@ -3,10 +3,9 @@
 ADOFAI Music Converter - Python版本
 将MIDI文件转换为A Dance of Fire and Ice的谱面文件
 
-支持三种模式：
-1. RW模式 (pathData) - 使用 SetSpeed + Twirl，固定15°夹角
-2. angleData模式 - 纯角度控制，固定基准BPM
-3. 自定义夹角模式 - 使用 angleData + SetSpeed，可自定义夹角
+支持两种模式：
+1. angleData模式 - 纯角度控制，固定基准BPM
+2. 拉链夹角模式 - 使用 angleData + SetSpeed，可自定义夹角
 
 作者: 基于 Luxus io 的Java版本重写
 GitHub: https://github.com/Luxusio/ADOFAI-Midi-Converter
@@ -73,20 +72,12 @@ def select_mode() -> int:
     print(t('ui.separator'))
     print(t('ui.mode_title'))
     print(t('ui.separator'))
-    print(t('ui.mode_rw'))
-    print(t('ui.mode_rw_desc1'))
-    print(t('ui.mode_rw_desc2'))
-    print(t('ui.mode_rw_desc3'))
-    print()
     print(t('ui.mode_angle'))
     print(t('ui.mode_angle_desc1'))
-    print(t('ui.mode_angle_desc2'))
-    print(t('ui.mode_angle_desc3'))
     print()
-    print(t('ui.mode_custom'))
-    print(t('ui.mode_custom_desc1'))
-    print(t('ui.mode_custom_desc2'))
-    print(t('ui.mode_custom_desc3'))
+    print(t('ui.mode_zipper'))
+    print(t('ui.mode_zipper_desc1'))
+    print(t('ui.mode_zipper_desc2'))
     print(t('ui.separator'))
 
     while True:
@@ -96,8 +87,6 @@ def select_mode() -> int:
                 return 1
             elif choice == "2":
                 return 2
-            elif choice == "3":
-                return 3
             else:
                 print(t('error.invalid_mode'))
         except ValueError:
@@ -253,11 +242,6 @@ def convert_midi_to_adofai(midi_path: str, disable: list, octave_offset: int,
     print(t('convert.step3'))
 
     if mode == 1:
-        # RW模式 - 使用AngleCustomConverter模拟pathData效果
-        print(t('convert.using_rw_mode'))
-        converter = AngleCustomConverter(base_angle=15.0)
-        map_data = converter.convert(us_delay_list)
-    elif mode == 2:
         # angleData模式 - 固定基准BPM
         print(t('convert.using_angle_mode'))
         converter = AngleDataConverter()
@@ -266,22 +250,19 @@ def convert_midi_to_adofai(midi_path: str, disable: list, octave_offset: int,
         if base_bpm is None:
             base_bpm = map_data.map_setting.bpm
             print(t('convert.median_bpm', bpm=base_bpm))
+
+        mode_suffix = "_angle"
     else:
-        # 自定义夹角模式
-        print(t('convert.using_custom_mode'))
+        # 拉链夹角模式
+        print(t('convert.using_zipper_mode'))
         converter = AngleCustomConverter(base_angle=custom_angle)
         map_data = converter.convert(us_delay_list)
+
+        mode_suffix = f"_zipper_{int(custom_angle) if custom_angle == int(custom_angle) else custom_angle}"
 
     print(t('convert.tiles_generated', count=len(map_data.tile_data_list)))
 
     # 生成输出路径
-    if mode == 1:
-        mode_suffix = "_rw"
-    elif mode == 2:
-        mode_suffix = "_angle"
-    else:
-        mode_suffix = f"_custom_{int(custom_angle) if custom_angle == int(custom_angle) else custom_angle}"
-
     idx = midi_path.rfind('.')
     if idx != -1:
         out_path = midi_path[:idx] + mode_suffix + ".adofai"
@@ -338,11 +319,11 @@ def main() -> None:
         base_bpm = None
         custom_angle = 15.0
 
-        if mode == 2:
+        if mode == 1:
             # angleData模式需要基准BPM
             base_bpm = get_base_bpm()
-        elif mode == 3:
-            # 自定义夹角模式需要夹角
+        else:
+            # 拉链夹角模式需要夹角
             custom_angle = get_custom_angle()
 
         # 执行转换
