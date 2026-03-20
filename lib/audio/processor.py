@@ -85,13 +85,6 @@ class AudioProcessor:
         """
         获取能量信号（完全参考 apofai 的实现）
 
-        apofai 原始逻辑：
-        y0 = np.array(all_samples)  # 原始样本
-        if y0.ndim == 2:
-            y0 = (y0[:,0]+y0[:,1])/2  # 立体声取平均
-        y1 = np.int32(y0)**2  # 平方，使用 int32 防止溢出
-        y1 = np.int16((y1/y1.max())*32767)  # 归一化到 int16
-
         Returns:
             np.ndarray: 能量信号（int16）
         """
@@ -100,10 +93,21 @@ class AudioProcessor:
 
         # 参考 apofai：使用 int32 计算平方，防止溢出
         y0 = self.samples
+        
+        # 调试信息
+        print(f"  样本数: {len(y0)}, 范围: [{y0.min():.1f}, {y0.max():.1f}]")
+        
         y1 = np.int32(y0) ** 2
 
         # 归一化到 int16 范围
-        y1 = np.int16((y1 / y1.max()) * 32767)
+        y1_max = y1.max()
+        print(f"  能量最大值: {y1_max}")
+        
+        if y1_max == 0:
+            print("  警告: 音频是静音！")
+            return np.zeros(len(y1), dtype=np.int16)
+        
+        y1 = np.int16((y1 / y1_max) * 32767)
 
         return y1
 

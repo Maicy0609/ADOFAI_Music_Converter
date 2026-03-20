@@ -67,6 +67,9 @@ class BeatDetector:
         sigma = self.SIGMA_BASE * np.exp(smoothness * 0.5)
         mu = self.MU * n / sample_rate  # 高斯中心在音频中间
 
+        # 调试信息
+        print(f"  smoothness={smoothness}, sigma={sigma:.2e}")
+
         # 高斯核公式：1/(sqrt(2π)*σ) * exp(-((x-μ)²)/(2σ²))
         gaussian_kernel = 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(
             -((x - mu) ** 2) / (2 * sigma ** 2)
@@ -76,9 +79,14 @@ class BeatDetector:
         y2 = self._convolve_fft(np.int32(energy_signal), gaussian_kernel)
 
         # 归一化到 int16 范围（修复除零错误）
-        y2_max = y2.max()
-        if y2_max == 0 or np.isnan(y2_max) or np.isinf(y2_max):
-            # 全零信号，返回空列表
+        y2_max = np.max(y2)
+        
+        # 调试信息
+        print(f"  卷积结果: max={y2_max:.2e}, min={np.min(y2):.2e}")
+        
+        if y2_max == 0 or np.isnan(y2_max) or np.isinf(y2_max) or y2_max < 1e-10:
+            # 信号太弱或无效
+            print(f"  警告: 卷积结果无效或太弱")
             self.beat_times = []
             self.smoothed_signal = np.zeros(len(y2), dtype=np.int16)
             return self.beat_times
@@ -88,6 +96,8 @@ class BeatDetector:
 
         # 峰值检测（完全参考 apofai）
         peaks = find_peaks(y2, [height_min, height_max])[0]
+
+        print(f"  峰值检测: 阈值=[{height_min}, {height_max}], 找到 {len(peaks)} 个峰值")
 
         # 转换为时间（秒）
         self.beat_times = (peaks / sample_rate).tolist()
