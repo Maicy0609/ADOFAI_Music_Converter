@@ -47,10 +47,11 @@ class BeatDetector:
         Args:
             energy_signal: 能量信号（int16 范围）
             sample_rate: 采样率
-            smoothness: 平滑度参数（-5 到 5）
+            smoothness: 平滑度参数（无范围限制！apofai 原版允许任意值）
                 - 越小，采音强度越高，按键越密集
                 - 越大，采音强度越低，按键越稀疏
                 - 默认 0
+                - 建议范围: -21 到 5，但可以设置 -100 等极端值
             height_min: 阈值最小值（默认 0）
             height_max: 阈值最大值（默认 32767）
 

@@ -297,15 +297,14 @@ def get_audio_params() -> dict:
     print(t('ui.smoothness_example'))
     print()
 
-    # 获取平滑度
+    # 获取平滑度（参考 apofai：允许任意值，不限制范围）
     smoothness = 0.0
     print(t('ui.smoothness_prompt'), end='')
     smoothness_str = input().strip()
     if smoothness_str:
         try:
             smoothness = float(smoothness_str)
-            # 限制范围 -5 到 5
-            smoothness = max(-5.0, min(5.0, smoothness))
+            # apofai 原版不限制范围，允许 -100 甚至更小的值
         except ValueError:
             pass
 
