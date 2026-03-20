@@ -54,13 +54,18 @@ class AudioProcessor:
         # 检查文件扩展名
         ext = os.path.splitext(path)[1].lower()
 
-        # 优先使用 miniaudio 解码（支持 WAV, MP3, FLAC, VORBIS）
+        # WAV 文件优先使用 scipy 读取（和 apofai 一样，对中文路径支持更好）
+        if ext == '.wav':
+            if self._load_wav_with_scipy(path, verbose):
+                return True
+            # scipy 失败，尝试 miniaudio
+            if miniaudio is not None:
+                return self._load_with_miniaudio(path, ext, verbose)
+            return False
+
+        # 非 WAV 格式使用 miniaudio
         if miniaudio is not None:
             return self._load_with_miniaudio(path, ext, verbose)
-        
-        # 回退方案：WAV 文件使用 scipy 读取
-        if ext == '.wav':
-            return self._load_wav_with_scipy(path, verbose)
         
         # 无法处理
         if verbose:
