@@ -70,6 +70,18 @@ class BeatDetector:
         # 调试信息
         print(f"  smoothness={smoothness}, sigma={sigma:.2e}")
 
+        # 检查 sigma 是否太小（会导致数值下溢）
+        # 对于长音频，sigma 太小时高斯核会全为 0
+        max_distance = max(mu, n / sample_rate - mu)
+        if sigma < 1e-10 or max_distance / sigma > 1e6:
+            print(f"  sigma 太小，跳过高斯平滑，直接检测峰值")
+            # 直接用能量信号检测峰值
+            peaks = find_peaks(energy_signal, [height_min, height_max])[0]
+            print(f"  峰值检测: 阈值=[{height_min}, {height_max}], 找到 {len(peaks)} 个峰值")
+            self.beat_times = (peaks / sample_rate).tolist()
+            self.smoothed_signal = energy_signal.copy()
+            return self.beat_times
+
         # 高斯核公式：1/(sqrt(2π)*σ) * exp(-((x-μ)²)/(2σ²))
         gaussian_kernel = 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(
             -((x - mu) ** 2) / (2 * sigma ** 2)
