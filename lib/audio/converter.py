@@ -223,16 +223,15 @@ class AudioZipperConverter:
             display_bpm = self.base_angle / 180.0 * 60.0 / interval
 
             # 拉链模式：角度在 0 和 (180-angle) 之间交替
-            # 参考 RW 模式: R=0°, W=165°
-            # - floor 1: R = 0°
-            # - floor 2: W = 165°
-            # - floor 3: R = 0°
-            # - floor 4: W = 165°
-            # 所以: 奇数 floor = 0°, 偶数 floor = 165°
+            # angleData = [0, 165, 0, 165, ...]
+            # - floor 1: 165°
+            # - floor 2: 0°
+            # - floor 3: 165°
+            # - floor 4: 0°
             if (i + 1) % 2 == 1:  # 奇数位置：1, 3, 5, ...
-                next_angle = 0.0
-            else:  # 偶数位置：2, 4, 6, ...
                 next_angle = alternate_angle
+            else:  # 偶数位置：2, 4, 6, ...
+                next_angle = 0.0
 
             tile_data = TileData(i + 1, angle=next_angle)
 
