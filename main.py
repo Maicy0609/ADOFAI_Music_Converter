@@ -56,14 +56,6 @@ except ImportError:
     print("Run: pip install mido")
     sys.exit(1)
 
-# 检查soundfile（全采音模式需要）
-try:
-    import soundfile
-except ImportError:
-    print("Error: soundfile library is required for Full Sample mode")
-    print("Run: pip install soundfile")
-    sys.exit(1)
-
 # 导入MIDI转换模块
 from lib.midi.common import MidiParser
 from lib.midi.angleD import AngleDataConverter

@@ -456,30 +456,35 @@ class FullSampleConverter:
     @staticmethod
     def load_audio_file(file_path: str) -> Tuple[np.ndarray, int]:
         """
-        加载音频文件
+        加载 WAV 音频文件
 
         Args:
-            file_path: 音频文件路径
+            file_path: 音频文件路径（仅支持 WAV 格式）
 
         Returns:
             Tuple[np.ndarray, int]: (音频数据, 采样率)
         """
-        try:
-            import soundfile as sf
-            audio_data, sample_rate = sf.read(file_path)
+        from scipy.io import wavfile
 
-            # 转换为单声道
-            if len(audio_data.shape) > 1:
-                # 多声道，取平均值
-                audio_data = np.mean(audio_data, axis=1)
+        # 读取 WAV 文件
+        sample_rate, audio_data = wavfile.read(file_path)
 
-            # 确保数据类型
+        # 转换数据类型
+        if audio_data.dtype == np.int16:
+            # int16 范围 -32768 到 32767，归一化到 -1.0 到 1.0
+            audio_data = audio_data.astype(np.float64) / 32768.0
+        elif audio_data.dtype == np.int32:
+            # int32 范围
+            audio_data = audio_data.astype(np.float64) / 2147483648.0
+        elif audio_data.dtype == np.uint8:
+            # uint8 范围 0 到 255
+            audio_data = (audio_data.astype(np.float64) - 128.0) / 128.0
+        else:
             audio_data = audio_data.astype(np.float64)
 
-            return audio_data, sample_rate
+        # 转换为单声道
+        if len(audio_data.shape) > 1:
+            # 多声道，取平均值
+            audio_data = np.mean(audio_data, axis=1)
 
-        except ImportError:
-            raise ImportError(
-                "soundfile library is required for audio loading. "
-                "Install it with: pip install soundfile"
-            )
+        return audio_data, sample_rate
