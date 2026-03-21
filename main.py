@@ -279,9 +279,35 @@ def get_custom_angle() -> float:
             print(t('error.invalid_number'))
 
 
-def get_audio_params() -> dict:
+def select_audio_mode() -> int:
+    """选择音频采样模式"""
+    print()
+    print(t('ui.separator'))
+    print(t('ui.audio_mode_title'))
+    print(t('ui.separator'))
+    print(t('ui.audio_mode_peak'))
+    print(t('ui.audio_mode_peak_desc'))
+    print()
+    print(t('ui.audio_mode_full'))
+    print(t('ui.audio_mode_full_desc'))
+    print(t('ui.separator'))
+
+    while True:
+        try:
+            choice = input(t('ui.audio_mode_prompt')).strip()
+            if choice == "" or choice == "1":
+                return 1
+            elif choice == "2":
+                return 2
+            else:
+                print(t('error.invalid_mode'))
+        except ValueError:
+            print(t('error.invalid_number'))
+
+
+def get_audio_params_peak() -> dict:
     """
-    获取音频检测参数
+    峰值采样模式参数
 
     参数说明：
     - height_min: 阈值最小值（0-32767），低于此值的峰值不采集
@@ -289,7 +315,7 @@ def get_audio_params() -> dict:
     """
     print()
     print(t('ui.separator'))
-    print(t('ui.audio_params_title'))
+    print(t('ui.peak_params_title'))
     print(t('ui.separator'))
     print()
 
@@ -419,20 +445,32 @@ def convert_audio(audio_path: str, mode: int) -> str:
     print()
     print(t('convert.sample_info', rate=processor.sample_rate, duration=processor.duration))
 
-    # 获取音频检测参数（参考 apofai）
-    params = get_audio_params()
+    # 选择音频采样模式
+    audio_mode = select_audio_mode()
 
     # 检测节拍
     print()
     print(t('convert.step1_audio'))
     detector = BeatDetector()
-    energy_signal = processor.get_energy_signal()
-    beat_times = detector.detect(
-        energy_signal,
-        processor.sample_rate,
-        height_min=params['height_min'],
-        height_max=params['height_max']
-    )
+
+    if audio_mode == 1:
+        # 峰值采样模式
+        params = get_audio_params_peak()
+        energy_signal = processor.get_energy_signal()
+        beat_times = detector.detect_peaks(
+            energy_signal,
+            processor.sample_rate,
+            height_min=params['height_min'],
+            height_max=params['height_max']
+        )
+        mode_suffix_audio = "_peak"
+    else:
+        # 采样点全采样模式
+        beat_times = detector.detect_all_samples(
+            processor.sample_rate,
+            len(processor.samples)
+        )
+        mode_suffix_audio = "_full"
 
     if not beat_times:
         print(t('error.no_beats_detected'))
@@ -472,9 +510,9 @@ def convert_audio(audio_path: str, mode: int) -> str:
     # 生成输出路径
     idx = audio_path.rfind('.')
     if idx != -1:
-        out_path = audio_path[:idx] + mode_suffix + ".adofai"
+        out_path = audio_path[:idx] + mode_suffix_audio + mode_suffix + ".adofai"
     else:
-        out_path = audio_path + mode_suffix + ".adofai"
+        out_path = audio_path + mode_suffix_audio + mode_suffix + ".adofai"
 
     map_data.save(out_path)
 
