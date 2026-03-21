@@ -200,6 +200,25 @@ class Pause(Action):
         self._save_after(sb)
 
 
+class SetHitsound(Action):
+    """设置打击音动作"""
+
+    def __init__(self, game_sound: str = "Hitsound",
+                 hitsound: str = "Kick",
+                 hitsound_volume: float = 100):
+        super().__init__(EventType.SET_HITSOUND)
+        self.game_sound = game_sound
+        self.hitsound = hitsound
+        self.hitsound_volume = hitsound_volume
+
+    def save(self, sb: List[str], floor: int) -> None:
+        self._save_before(sb, floor)
+        self._save_string(sb, "gameSound", self.game_sound)
+        self._save_string(sb, "hitsound", self.hitsound)
+        self._save_double(sb, "hitsoundVolume", self.hitsound_volume)
+        self._save_after(sb)
+
+
 # ============================================================================
 # Melody - 旋律数据
 # ============================================================================

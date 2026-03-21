@@ -3,17 +3,19 @@
 音频转换器
 将检测到的节拍时间转换为ADOFAI谱面
 
-提供两种模式：
+提供三种模式：
 1. AudioAngleConverter - 纯angleData模式（固定BPM，动态角度）
 2. AudioZipperConverter - 拉链模式（固定角度，动态BPM）
+3. FullSampleConverter - 全采音模式（直线轨道，打击音播放音频）
 
-核心原则：两种模式生成的拍子绝对时间完全相同！
+核心原则：前两种模式生成的拍子绝对时间完全相同！
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from statistics import median
 import sys
 import os
+import numpy as np
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -24,7 +26,8 @@ from lib.midi.common import (
     MapSetting,
     EventType,
     SetSpeed,
-    Pause
+    Pause,
+    SetHitsound
 )
 
 
@@ -269,3 +272,214 @@ class AudioZipperConverter:
             float: 显示BPM
         """
         return angle / 180.0 * 60.0 / interval
+
+
+class FullSampleConverter:
+    """
+    全采音模式转换器
+    基于零阶保持采样重构原理，将音频转换为打击音序列
+
+    核心原理：
+    - 将音频重采样到目标伪采样率（如8000Hz）
+    - 每个采样点对应一个砖块
+    - 砖块设置打击音(Kick)和音量(0-100)
+    - 轨道为直线（角度0°）
+    - BPM = 伪采样率 × 60
+
+    时间公式：
+    - 单帧时长 = 1 / 伪采样率
+    - BPM = 伪采样率 × 60
+    - 例如：8000Hz → BPM = 480,000
+    """
+
+    # 默认伪采样率
+    DEFAULT_SAMPLE_RATE = 8000
+    # 目标输出采样率（保持核长度）
+    OUTPUT_SAMPLE_RATE = 48000
+    # 默认打击音
+    DEFAULT_HITSOUND = "Kick"
+    # 默认游戏音效类型
+    DEFAULT_GAME_SOUND = "Hitsound"
+
+    def __init__(self, pseudo_sample_rate: float = 8000.0, use_float_volume: bool = False):
+        """
+        初始化
+
+        Args:
+            pseudo_sample_rate: 伪采样率（Hz），默认8000
+            use_float_volume: 是否使用浮点数音量，False则使用整数
+        """
+        self._validate_sample_rate(pseudo_sample_rate)
+        self.pseudo_sample_rate = pseudo_sample_rate
+        self.use_float_volume = use_float_volume
+
+    def _validate_sample_rate(self, sample_rate: float) -> None:
+        """验证采样率合法性"""
+        if sample_rate <= 0:
+            raise ValueError(f"Sample rate must be greater than 0, got {sample_rate}")
+        if sample_rate > self.OUTPUT_SAMPLE_RATE:
+            raise ValueError(f"Sample rate cannot exceed {self.OUTPUT_SAMPLE_RATE}, got {sample_rate}")
+
+    @property
+    def bpm(self) -> float:
+        """计算谱面BPM"""
+        return self.pseudo_sample_rate * 60.0
+
+    def convert(
+        self,
+        audio_data: np.ndarray,
+        original_sample_rate: int,
+        audio_offset: float = 0.0,
+        song_filename: str = ""
+    ) -> MapData:
+        """
+        将音频数据转换为全采音谱面
+
+        Args:
+            audio_data: 音频数据（numpy数组，单声道）
+            original_sample_rate: 原始采样率
+            audio_offset: 音频偏移（毫秒）
+            song_filename: 歌曲文件名
+
+        Returns:
+            MapData: 谱面数据
+        """
+        map_data = MapData(use_angle_data=True)
+
+        # 设置BPM
+        map_data.map_setting.bpm = self.bpm
+
+        # 设置打击音默认值
+        map_data.map_setting.hitsound = self.DEFAULT_HITSOUND
+        map_data.map_setting.hitsound_volume = 100
+
+        # 设置音频偏移
+        if audio_offset != 0:
+            map_data.map_setting.offset = int(audio_offset)
+
+        # 设置歌曲文件名
+        if song_filename:
+            map_data.map_setting.song_filename = song_filename
+
+        tile_data_list = map_data.tile_data_list
+
+        # 重采样到伪采样率
+        resampled_data = self._resample_audio(audio_data, original_sample_rate)
+
+        # 计算音量序列
+        volumes = self._calculate_volumes(resampled_data)
+
+        # 生成谱面
+        # 添加起始瓷砖 (floor 0)
+        tile_data_list.append(TileData(0, angle=0))
+
+        # 为每个采样点添加瓷砖和SetHitsound事件
+        for i, volume in enumerate(volumes):
+            tile_data = TileData(i + 1, angle=0)  # 直线轨道，所有角度为0
+
+            # 添加SetHitsound事件
+            tile_data.get_action_list(EventType.SET_HITSOUND).append(
+                SetHitsound(
+                    game_sound=self.DEFAULT_GAME_SOUND,
+                    hitsound=self.DEFAULT_HITSOUND,
+                    hitsound_volume=volume
+                )
+            )
+
+            tile_data_list.append(tile_data)
+
+        return map_data
+
+    def _resample_audio(self, audio_data: np.ndarray, original_sample_rate: int) -> np.ndarray:
+        """
+        使用scipy.signal.resample_poly重采样音频
+
+        Args:
+            audio_data: 原始音频数据
+            original_sample_rate: 原始采样率
+
+        Returns:
+            np.ndarray: 重采样后的音频数据
+        """
+        from scipy.signal import resample_poly
+
+        # 计算重采样比率
+        # resample_poly 使用 up/down 参数
+        # 新采样率 = 原采样率 * up / down
+        # 因此 up/down = 新采样率 / 原采样率
+
+        # 使用最大公约数简化分数
+        from math import gcd
+
+        target_rate = int(self.pseudo_sample_rate)
+        orig_rate = int(original_sample_rate)
+
+        # 计算 up 和 down
+        common_divisor = gcd(target_rate, orig_rate)
+        up = target_rate // common_divisor
+        down = orig_rate // common_divisor
+
+        # 重采样
+        resampled = resample_poly(audio_data, up, down)
+
+        return resampled
+
+    def _calculate_volumes(self, audio_data: np.ndarray) -> List[float]:
+        """
+        计算每个采样点的音量
+
+        Args:
+            audio_data: 重采样后的音频数据
+
+        Returns:
+            List[float]: 音量列表（0-100）
+        """
+        # 取绝对值获取幅度
+        amplitudes = np.abs(audio_data)
+
+        # 归一化到 0-1
+        max_amplitude = np.max(amplitudes)
+        if max_amplitude > 0:
+            normalized = amplitudes / max_amplitude
+        else:
+            normalized = amplitudes
+
+        # 映射到 0-100
+        volumes = normalized * 100.0
+
+        # 根据设置决定是否转换为整数
+        if not self.use_float_volume:
+            volumes = np.round(volumes).astype(int)
+
+        return volumes.tolist()
+
+    @staticmethod
+    def load_audio_file(file_path: str) -> Tuple[np.ndarray, int]:
+        """
+        加载音频文件
+
+        Args:
+            file_path: 音频文件路径
+
+        Returns:
+            Tuple[np.ndarray, int]: (音频数据, 采样率)
+        """
+        try:
+            import soundfile as sf
+            audio_data, sample_rate = sf.read(file_path)
+
+            # 转换为单声道
+            if len(audio_data.shape) > 1:
+                # 多声道，取平均值
+                audio_data = np.mean(audio_data, axis=1)
+
+            # 确保数据类型
+            audio_data = audio_data.astype(np.float64)
+
+            return audio_data, sample_rate
+
+        except ImportError:
+            raise ImportError(
+                "soundfile library is required for audio loading. "
+                "Install it with: pip install soundfile"
+            )

@@ -10,8 +10,9 @@ ADOFAI Music Converter - Python版本
 转换模式：
 1. angleData模式 - 纯角度控制，固定基准BPM
 2. 拉链夹角模式 - 固定角度，动态BPM调整
+3. 全采音模式 - 直线轨道，打击音播放音频
 
-核心原则：两种模式生成的拍子绝对时间完全相同！
+核心原则：前两种模式生成的拍子绝对时间完全相同！
 
 作者: 基于 Luxus io 的Java版本重写
 GitHub: https://github.com/Luxusio/ADOFAI-Midi-Converter
@@ -55,6 +56,14 @@ except ImportError:
     print("Run: pip install mido")
     sys.exit(1)
 
+# 检查soundfile（全采音模式需要）
+try:
+    import soundfile
+except ImportError:
+    print("Error: soundfile library is required for Full Sample mode")
+    print("Run: pip install soundfile")
+    sys.exit(1)
+
 # 导入MIDI转换模块
 from lib.midi.common import MidiParser
 from lib.midi.angleD import AngleDataConverter
@@ -63,7 +72,7 @@ from lib.midi.angleD_custom import AngleCustomConverter
 # 导入音频处理模块
 from lib.audio.processor import AudioProcessor
 from lib.audio.detector import BeatDetector
-from lib.audio.converter import AudioAngleConverter, AudioZipperConverter
+from lib.audio.converter import AudioAngleConverter, AudioZipperConverter, FullSampleConverter
 
 
 # ============================================================================
@@ -140,6 +149,10 @@ def select_mode() -> int:
     print(t('ui.mode_zipper'))
     print(t('ui.mode_zipper_desc1'))
     print(t('ui.mode_zipper_desc2'))
+    print()
+    print(t('ui.mode_fullsample'))
+    print(t('ui.mode_fullsample_desc1'))
+    print(t('ui.mode_fullsample_desc2'))
     print(t('ui.separator'))
 
     while True:
@@ -149,6 +162,8 @@ def select_mode() -> int:
                 return 1
             elif choice == "2":
                 return 2
+            elif choice == "3":
+                return 3
             else:
                 print(t('error.invalid_mode'))
         except ValueError:
@@ -349,6 +364,78 @@ def get_audio_params_peak() -> dict:
     }
 
 
+def get_fullsample_params() -> dict:
+    """
+    全采音模式参数
+
+    参数说明：
+    - pseudo_sample_rate: 伪采样率（Hz），决定音频还原质量和谱面密度
+    - use_float_volume: 是否使用浮点数音量
+    """
+    print()
+    print(t('ui.separator'))
+    print(t('ui.fullsample_title'))
+    print(t('ui.separator'))
+    print(t('ui.fullsample_rate_desc'))
+    print(t('ui.fullsample_rate_example'))
+    print(t('ui.fullsample_rate_range'))
+    print(t('ui.separator'))
+
+    # 获取伪采样率
+    while True:
+        try:
+            rate_str = input(t('ui.fullsample_rate_prompt')).strip()
+            if rate_str == "":
+                pseudo_sample_rate = 8000.0
+            else:
+                pseudo_sample_rate = float(rate_str)
+
+            # 验证采样率
+            if pseudo_sample_rate <= 0 or pseudo_sample_rate > 48000:
+                print(t('error.sample_rate_invalid'))
+                continue
+
+            break
+        except ValueError:
+            print(t('error.invalid_number'))
+
+    print(t('ui.fullsample_rate_set', rate=pseudo_sample_rate))
+    print(t('ui.fullsample_bpm_info', bpm=pseudo_sample_rate * 60))
+
+    # 选择音量精度
+    print()
+    print(t('ui.separator'))
+    print(t('ui.fullsample_volume_title'))
+    print(t('ui.separator'))
+    print(t('ui.fullsample_volume_int'))
+    print(t('ui.fullsample_volume_int_desc'))
+    print()
+    print(t('ui.fullsample_volume_float'))
+    print(t('ui.fullsample_volume_float_desc'))
+    print(t('ui.separator'))
+
+    while True:
+        try:
+            choice = input(t('ui.fullsample_volume_prompt')).strip()
+            if choice == "" or choice == "1":
+                use_float_volume = False
+            elif choice == "2":
+                use_float_volume = True
+            else:
+                print(t('error.invalid_mode'))
+                continue
+            break
+        except ValueError:
+            print(t('error.invalid_number'))
+
+    print(t('ui.separator'))
+
+    return {
+        'pseudo_sample_rate': pseudo_sample_rate,
+        'use_float_volume': use_float_volume
+    }
+
+
 # ============================================================================
 # 转换函数
 # ============================================================================
@@ -435,6 +522,10 @@ def convert_audio(audio_path: str, mode: int) -> str:
     print(t('convert.title'))
     print(t('ui.separator'))
 
+    # 全采音模式特殊处理
+    if mode == 3:
+        return convert_audio_fullsample(audio_path)
+
     # 加载音频
     print(t('convert.loading', path=audio_path))
     processor = AudioProcessor()
@@ -513,6 +604,67 @@ def convert_audio(audio_path: str, mode: int) -> str:
         out_path = audio_path[:idx] + mode_suffix_audio + mode_suffix + ".adofai"
     else:
         out_path = audio_path + mode_suffix_audio + mode_suffix + ".adofai"
+
+    map_data.save(out_path)
+
+    return out_path
+
+
+def convert_audio_fullsample(audio_path: str) -> str:
+    """全采音模式转换音频文件"""
+    print(t('convert.loading', path=audio_path))
+
+    # 获取全采音参数
+    params = get_fullsample_params()
+    pseudo_sample_rate = params['pseudo_sample_rate']
+    use_float_volume = params['use_float_volume']
+
+    print()
+    print(t('convert.step1_fullsample'))
+
+    # 加载音频
+    try:
+        audio_data, sample_rate = FullSampleConverter.load_audio_file(audio_path)
+    except Exception as e:
+        print(t('error.audio_load_failed'))
+        print(f"  {e}")
+        return None
+
+    duration = len(audio_data) / sample_rate
+    estimated_tiles = int(duration * pseudo_sample_rate)
+
+    print(t('convert.sample_info', rate=sample_rate, duration=duration))
+    print(t('ui.fullsample_tiles_info', count=estimated_tiles))
+
+    # 创建转换器
+    converter = FullSampleConverter(
+        pseudo_sample_rate=pseudo_sample_rate,
+        use_float_volume=use_float_volume
+    )
+
+    print()
+    print(t('convert.step2_fullsample'))
+
+    # 转换
+    import os
+    song_filename = os.path.basename(audio_path)
+    map_data = converter.convert(
+        audio_data=audio_data,
+        original_sample_rate=sample_rate,
+        song_filename=song_filename
+    )
+
+    print()
+    print(t('convert.step3'))
+    print(t('convert.using_fullsample_mode'))
+    print(t('convert.tiles_generated', count=len(map_data.tile_data_list)))
+
+    # 生成输出路径
+    idx = audio_path.rfind('.')
+    if idx != -1:
+        out_path = audio_path[:idx] + f"_fullsample_{int(pseudo_sample_rate)}.adofai"
+    else:
+        out_path = audio_path + f"_fullsample_{int(pseudo_sample_rate)}.adofai"
 
     map_data.save(out_path)
 
