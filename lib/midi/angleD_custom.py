@@ -117,12 +117,16 @@ class AngleCustomConverter:
         tile_data_list = map_data.tile_data_list
 
         # 特殊情况：180° 夹角
-        # angleData = [0, 0, 0, ...]，所有角度都是 0
-        # 不需要 Twirl，不需要 SetSpeed
+        # angleData = [0, 0, 0, ...]，每个旋转都是 180°
+        # 不需要 SetSpeed，直接用谱面 BPM
         if angle == 180.0:
+            # 添加起始瓷砖
             tile_data_list.append(TileData(0, angle=0))
+            
             for i in range(len(us_delay_list)):
+                # 所有角度都是 0
                 tile_data_list.append(TileData(i + 1, angle=0))
+            
             return map_data
 
         # 计算交替角度
@@ -143,11 +147,10 @@ class AngleCustomConverter:
             display_bpm = angle / 180.0 * 60.0 / time_seconds
 
             # 拉链模式：角度在 0 和 (180-angle) 之间交替
-            # angleData = [0, 165, 0, 165, ...]
-            # - floor 1: 165°
-            # - floor 2: 0°
-            # - floor 3: 165°
-            # - floor 4: 0°
+            # tile 1: 0 → alternate_angle (逆时针转 angle°)
+            # tile 2: alternate_angle → 0 (顺时针转 angle°)
+            # tile 3: 0 → alternate_angle
+            # ...
             if (i + 1) % 2 == 1:  # 奇数位置：1, 3, 5, ...
                 next_angle = alternate_angle
             else:  # 偶数位置：2, 4, 6, ...
@@ -155,15 +158,14 @@ class AngleCustomConverter:
 
             tile_data = TileData(i + 1, angle=next_angle)
 
-            # 添加 SetSpeed 事件（从 floor 1 开始）
+            # 添加 SetSpeed 事件
             tile_data.get_action_list(EventType.SET_SPEED).append(
                 SetSpeed("Bpm", display_bpm, 1.0)
             )
 
-            # 添加 Twirl 事件（从 floor 2 开始）
-            if i + 1 >= 2:
-                from .common import Twirl
-                tile_data.get_action_list(EventType.TWIRL).append(Twirl())
+            # 注意：拉链模式下旋转角度固定为 angle（≤ 180°）
+            # 如果时间间隔很长，display_bpm 会很小，但这是允许的
+            # 不需要 Pause 事件，因为旋转角度不会超过 360°
 
             tile_data_list.append(tile_data)
 
