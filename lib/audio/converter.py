@@ -203,6 +203,20 @@ class AudioZipperConverter:
 
         tile_data_list = map_data.tile_data_list
 
+        # 计算节拍间隔
+        intervals = []
+        for i in range(1, len(beat_times)):
+            intervals.append(beat_times[i] - beat_times[i - 1])
+
+        # 特殊情况：180° 夹角
+        # angleData = [0, 0, 0, ...]，所有角度都是 0
+        # 不需要 Twirl，不需要 SetSpeed
+        if self.base_angle == 180.0:
+            tile_data_list.append(TileData(0, angle=0))
+            for i in range(len(intervals)):
+                tile_data_list.append(TileData(i + 1, angle=0))
+            return map_data
+
         # 计算交替角度
         # 拉链序列：[0, 180-angle, 0, 180-angle, ...]
         # 例如 angle=15° 时：[0, 165, 0, 165, ...]
@@ -210,11 +224,6 @@ class AudioZipperConverter:
 
         # 添加起始瓷砖
         tile_data_list.append(TileData(0, angle=0))
-
-        # 计算节拍间隔
-        intervals = []
-        for i in range(1, len(beat_times)):
-            intervals.append(beat_times[i] - beat_times[i - 1])
 
         for i, interval in enumerate(intervals):
             # 计算显示BPM

@@ -116,6 +116,15 @@ class AngleCustomConverter:
         map_data = MapData(use_angle_data=True)
         tile_data_list = map_data.tile_data_list
 
+        # 特殊情况：180° 夹角
+        # angleData = [0, 0, 0, ...]，所有角度都是 0
+        # 不需要 Twirl，不需要 SetSpeed
+        if angle == 180.0:
+            tile_data_list.append(TileData(0, angle=0))
+            for i in range(len(us_delay_list)):
+                tile_data_list.append(TileData(i + 1, angle=0))
+            return map_data
+
         # 计算交替角度
         # 拉链序列：[0, 180-angle, 0, 180-angle, ...]
         # 例如 angle=15° 时：[0, 165, 0, 165, ...]
