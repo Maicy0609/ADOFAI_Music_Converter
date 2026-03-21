@@ -29,6 +29,7 @@ from lib.midi.common import (
     Pause,
     SetHitsound
 )
+from lib.utils import ProgressBar
 
 
 class AudioAngleConverter:
@@ -344,6 +345,8 @@ class FullSampleConverter:
         Returns:
             MapData: 谱面数据
         """
+        from tqdm import tqdm
+
         map_data = MapData(use_angle_data=True)
 
         # 设置BPM
@@ -373,8 +376,8 @@ class FullSampleConverter:
         # 添加起始瓷砖 (floor 0)
         tile_data_list.append(TileData(0, angle=0))
 
-        # 为每个采样点添加瓷砖和SetHitsound事件
-        for i, volume in enumerate(volumes):
+        # 为每个采样点添加瓷砖和SetHitsound事件（带进度条）
+        for i, volume in enumerate(tqdm(volumes, desc="生成瓷砖", unit="个", ncols=80)):
             tile_data = TileData(i + 1, angle=0)  # 直线轨道，所有角度为0
 
             # 添加SetHitsound事件

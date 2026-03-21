@@ -658,7 +658,9 @@ def convert_audio_fullsample(audio_path: str) -> str:
     else:
         out_path = audio_path + f"_fullsample_{int(pseudo_sample_rate)}.adofai"
 
-    map_data.save(out_path)
+    # 保存文件（启用进度条）
+    print()
+    map_data.save(out_path, show_progress=True)
 
     return out_path
 

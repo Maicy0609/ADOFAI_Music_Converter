@@ -610,23 +610,41 @@ class MapData:
         self.tile_data_list: List[TileData] = []
         self.use_angle_data = use_angle_data
 
-    def save(self, path: str) -> None:
-        """保存地图到文件"""
+    def save(self, path: str, show_progress: bool = False) -> None:
+        """
+        保存地图到文件
+
+        Args:
+            path: 输出文件路径
+            show_progress: 是否显示进度条（大量瓷砖时建议启用）
+        """
         sb: List[str] = []
 
         sb.append('{\n')
 
         if self.use_angle_data:
             sb.append('\t"angleData": [')
-            for i, tile_data in enumerate(self.tile_data_list):
-                if i > 0:
-                    sb.append(', ')
-                angle = tile_data.angle
-                long_value = int(angle)
-                if angle == long_value:
-                    sb.append(str(long_value))
-                else:
-                    sb.append(f'{angle:.6f}')
+            if show_progress and len(self.tile_data_list) > 10000:
+                from tqdm import tqdm
+                for i, tile_data in enumerate(tqdm(self.tile_data_list, desc="写入angleData", unit="个", ncols=80)):
+                    if i > 0:
+                        sb.append(', ')
+                    angle = tile_data.angle
+                    long_value = int(angle)
+                    if angle == long_value:
+                        sb.append(str(long_value))
+                    else:
+                        sb.append(f'{angle:.6f}')
+            else:
+                for i, tile_data in enumerate(self.tile_data_list):
+                    if i > 0:
+                        sb.append(', ')
+                    angle = tile_data.angle
+                    long_value = int(angle)
+                    if angle == long_value:
+                        sb.append(str(long_value))
+                    else:
+                        sb.append(f'{angle:.6f}')
             sb.append('], \n')
         else:
             sb.append('\t"pathData": "')
@@ -639,8 +657,13 @@ class MapData:
         self.map_setting.save(sb)
         sb.append('\t},\n\t"actions":\n\t[\n')
 
-        for tile_data in self.tile_data_list:
-            tile_data.save(sb)
+        if show_progress and len(self.tile_data_list) > 10000:
+            from tqdm import tqdm
+            for tile_data in tqdm(self.tile_data_list, desc="写入actions", unit="个", ncols=80):
+                tile_data.save(sb)
+        else:
+            for tile_data in self.tile_data_list:
+                tile_data.save(sb)
 
         sb.append('\t]\n}\n')
 
