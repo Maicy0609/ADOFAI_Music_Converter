@@ -150,9 +150,10 @@ class AngleCustomConverter:
                 SetSpeed("Bpm", display_bpm, 1.0)
             )
 
-            # 注意：拉链模式下旋转角度固定为 angle（≤ 180°）
-            # 如果时间间隔很长，display_bpm 会很小，但这是允许的
-            # 不需要 Pause 事件，因为旋转角度不会超过 360°
+            # 添加 Twirl 事件（从 tile 2 开始，和 RW 模式一样）
+            if i + 1 > 1:
+                from .common import Twirl
+                tile_data.get_action_list(EventType.TWIRL).append(Twirl())
 
             tile_data_list.append(tile_data)
 

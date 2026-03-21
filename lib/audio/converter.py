@@ -239,6 +239,11 @@ class AudioZipperConverter:
                 SetSpeed("Bpm", display_bpm, 1.0)
             )
 
+            # 添加Twirl事件（从 tile 2 开始，和 RW 模式一样）
+            if i + 1 > 1:
+                from lib.midi.common import Twirl
+                tile_data.get_action_list(EventType.TWIRL).append(Twirl())
+
             tile_data_list.append(tile_data)
 
         return map_data
