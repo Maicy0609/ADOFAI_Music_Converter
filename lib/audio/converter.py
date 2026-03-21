@@ -223,24 +223,26 @@ class AudioZipperConverter:
             display_bpm = self.base_angle / 180.0 * 60.0 / interval
 
             # 拉链模式：角度在 0 和 (180-angle) 之间交替
-            # tile 1: 0 → alternate_angle (逆时针转 angle°)
-            # tile 2: alternate_angle → 0 (顺时针转 angle°)
-            # tile 3: 0 → alternate_angle
-            # ...
+            # 参考 RW 模式: R=0°, W=165°
+            # - floor 1: R = 0°
+            # - floor 2: W = 165°
+            # - floor 3: R = 0°
+            # - floor 4: W = 165°
+            # 所以: 奇数 floor = 0°, 偶数 floor = 165°
             if (i + 1) % 2 == 1:  # 奇数位置：1, 3, 5, ...
-                next_angle = alternate_angle
-            else:  # 偶数位置：2, 4, 6, ...
                 next_angle = 0.0
+            else:  # 偶数位置：2, 4, 6, ...
+                next_angle = alternate_angle
 
             tile_data = TileData(i + 1, angle=next_angle)
 
-            # 添加SetSpeed事件
+            # 添加SetSpeed事件（从 floor 1 开始）
             tile_data.get_action_list(EventType.SET_SPEED).append(
                 SetSpeed("Bpm", display_bpm, 1.0)
             )
 
-            # 添加Twirl事件（从 tile 2 开始，和 RW 模式一样）
-            if i + 1 > 1:
+            # 添加Twirl事件（从 floor 2 开始）
+            if i + 1 >= 2:
                 from lib.midi.common import Twirl
                 tile_data.get_action_list(EventType.TWIRL).append(Twirl())
 
