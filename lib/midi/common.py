@@ -190,13 +190,60 @@ class Twirl(Action):
 class Pause(Action):
     """暂停动作"""
 
-    def __init__(self, duration: Optional[float] = None):
+    def __init__(self, duration: Optional[float] = None, countdown_ticks: int = 0, angle_correction_dir: int = -1):
         super().__init__(EventType.PAUSE)
         self.duration = duration
+        self.countdown_ticks = countdown_ticks
+        self.angle_correction_dir = angle_correction_dir
 
     def save(self, sb: List[str], floor: int) -> None:
         self._save_before(sb, floor)
         self._save_double(sb, "duration", self.duration)
+        self._save_long(sb, "countdownTicks", self.countdown_ticks if self.countdown_ticks != 0 else None)
+        self._save_long(sb, "angleCorrectionDir", self.angle_correction_dir if self.angle_correction_dir != -1 else None)
+        self._save_after(sb)
+
+
+class PositionTrack(Action):
+    """位置轨道动作 - 用于大圈圈模式调整轨道位置"""
+
+    def __init__(self, position_offset: Optional[List[float]] = None,
+                 relative_to: Optional[List] = None,
+                 just_this_tile: bool = False,
+                 editor_only: bool = False):
+        super().__init__(EventType.POSITION_TRACK)
+        self.position_offset = position_offset
+        self.relative_to = relative_to
+        self.just_this_tile = just_this_tile
+        self.editor_only = editor_only
+
+    def save(self, sb: List[str], floor: int) -> None:
+        self._save_before(sb, floor)
+        if self.position_offset is not None:
+            sb.append(', "positionOffset": [')
+            for i, v in enumerate(self.position_offset):
+                long_value = int(v)
+                if v == long_value:
+                    sb.append(str(long_value))
+                else:
+                    sb.append(f'{v:.6f}')
+                if i < len(self.position_offset) - 1:
+                    sb.append(', ')
+            sb.append(']')
+        if self.relative_to is not None:
+            sb.append(', "relativeTo": [')
+            for i, v in enumerate(self.relative_to):
+                if isinstance(v, str):
+                    sb.append(f'"{v}"')
+                else:
+                    sb.append(str(v))
+                if i < len(self.relative_to) - 1:
+                    sb.append(', ')
+            sb.append(']')
+        if self.just_this_tile:
+            sb.append(', "justThisTile": true')
+        if self.editor_only:
+            sb.append(', "editorOnly": true')
         self._save_after(sb)
 
 

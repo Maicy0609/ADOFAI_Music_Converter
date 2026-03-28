@@ -19,14 +19,17 @@
 |------|------|-----|------|
 | angleData | 纯角度控制 | 固定 | 动态 |
 | 拉链夹角 | 固定角度 + SetSpeed | 动态 | 固定 |
+| 全采音 | 直线轨道 + 打击音 | 固定 | 固定(直线) |
+| 大圈圈 | 圆弧轨道 | 动态 | 动态 |
 
 ## 功能特点
 
 - **双输入支持**：MIDI文件和音频文件
-- **两种转换模式**：angleData模式和拉链夹角模式
+- **四种转换模式**：angleData模式、拉链夹角模式、全采音模式、大圈圈模式
 - **多语言**：英文和简体中文
 - **自动BPM检测**：自动计算最优BPM
 - **可调参数**：角度、平滑度、阈值等
+- **大圈圈模式**：每个MIDI轨道单独输出文件，可禁用指定轨道
 
 ## 项目结构
 
@@ -37,7 +40,8 @@ ADOFAI_Music_Converter/
 │   ├── midi/
 │   │   ├── common.py          # MIDI解析器和数据结构
 │   │   ├── angleD.py          # angleData模式 (MIDI)
-│   │   └── angleD_custom.py   # 拉链模式 (MIDI)
+│   │   ├── angleD_custom.py   # 拉链模式 (MIDI)
+│   │   └── bigcircle.py       # 大圈圈模式 (MIDI)
 │   └── audio/
 │       ├── processor.py       # 音频加载器
 │       ├── detector.py        # 节拍检测 (FFT + 高斯)
@@ -140,8 +144,16 @@ python main.py
 
 - angleData模式：`文件名_angle.adofai`
 - 拉链模式：`文件名_zipper_XX.adofai`（XX为角度值）
+- 全采音模式：`文件名_fullsample_XXXX.adofai`（XXXX为采样率）
+- 大圈圈模式：`文件名_TrackN.adofai`（N为轨道索引，每个轨道一个文件）
 
 ## 版本历史
+
+### v2.5.0
+- 新增大圈圈模式 (Big Circle Mode)
+- 每个MIDI轨道单独生成谱面文件
+- 大圈圈模式支持禁用指定轨道
+- 支持 PositionTrack 事件和增强的 Pause 事件
 
 ### v2.4.0
 - 使用 miniaudio 替代 ffmpeg 进行音频解码

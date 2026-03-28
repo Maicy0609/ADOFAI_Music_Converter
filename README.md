@@ -13,20 +13,22 @@ This tool converts MIDI files or audio files into level files for [A Dance of Fi
 - **Audio File**: Auto-detect beats from audio waveform (WAV, MP3, FLAC, VORBIS)
 
 ### Conversion Modes
-Both modes generate **identical absolute timing** for each beat!
 
 | Mode | Description | BPM | Angle |
 |------|-------------|-----|-------|
 | angleData | Pure angle control | Fixed | Dynamic |
 | Zipper Angle | Fixed angle + SetSpeed | Dynamic | Fixed |
+| Full Sample | Straight track + hitsounds | Fixed | Fixed (straight) |
+| Big Circle | Arc-shaped track | Dynamic | Dynamic |
 
 ## Features
 
 - **Dual Input Support**: MIDI files and audio files
-- **Two Conversion Modes**: angleData and Zipper Angle
+- **Four Conversion Modes**: angleData, Zipper Angle, Full Sample, Big Circle
 - **Multi-language**: English and Simplified Chinese
 - **Auto BPM Detection**: Automatically calculates optimal BPM
 - **Customizable Parameters**: Angle, smoothness, threshold, etc.
+- **Big Circle Mode**: Each MIDI track outputs a separate file, with track disable option
 
 ## Project Structure
 
@@ -37,7 +39,8 @@ ADOFAI_Music_Converter/
 │   ├── midi/
 │   │   ├── common.py          # MIDI parser and data structures
 │   │   ├── angleD.py          # angleData mode for MIDI
-│   │   └── angleD_custom.py   # Zipper mode for MIDI
+│   │   ├── angleD_custom.py   # Zipper mode for MIDI
+│   │   └── bigcircle.py       # Big Circle mode for MIDI
 │   └── audio/
 │       ├── processor.py       # Audio loader
 │       ├── detector.py        # Beat detection (FFT + Gaussian)
@@ -140,8 +143,16 @@ Example: 15° angle → Magic Number = 12
 
 - angleData mode: `filename_angle.adofai`
 - Zipper mode: `filename_zipper_XX.adofai` (XX = angle)
+- Full Sample mode: `filename_fullsample_XXXX.adofai` (XXXX = sample rate)
+- Big Circle mode: `filename_TrackN.adofai` (N = track index, one file per track)
 
 ## Version History
+
+### v2.5.0
+- Added Big Circle Mode (大圈圈模式)
+- Each MIDI track generates a separate level file
+- Track disable option for Big Circle Mode
+- PositionTrack and enhanced Pause event support
 
 ### v2.4.0
 - Use miniaudio instead of ffmpeg for audio decoding

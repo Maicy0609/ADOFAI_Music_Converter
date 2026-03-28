@@ -20,6 +20,7 @@ GitHub: https://github.com/Luxusio/ADOFAI-Midi-Converter
 
 import os
 import sys
+from typing import List
 
 # 添加项目根目录到路径
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +61,7 @@ except ImportError:
 from lib.midi.common import MidiParser
 from lib.midi.angleD import AngleDataConverter
 from lib.midi.angleD_custom import AngleCustomConverter
+from lib.midi.bigcircle import BigCircleConverter
 
 # 导入音频处理模块
 from lib.audio.processor import AudioProcessor
@@ -145,19 +147,25 @@ def select_mode() -> int:
     print(t('ui.mode_fullsample'))
     print(t('ui.mode_fullsample_desc1'))
     print(t('ui.mode_fullsample_desc2'))
+    print()
+    print(t('ui.mode_bigcircle'))
+    print(t('ui.mode_bigcircle_desc1'))
+    print(t('ui.mode_bigcircle_desc2'))
     print(t('ui.separator'))
 
     while True:
         try:
-            choice = input(t('ui.mode_prompt')).strip()
+            choice = input(t('ui.mode_prompt_bigcircle')).strip()
             if choice == "" or choice == "1":
                 return 1
             elif choice == "2":
                 return 2
             elif choice == "3":
                 return 3
+            elif choice == "4":
+                return 4
             else:
-                print(t('error.invalid_mode'))
+                print(t('error.invalid_mode_bigcircle'))
         except ValueError:
             print(t('error.invalid_number'))
 
@@ -507,6 +515,113 @@ def convert_midi(midi_path: str, mode: int) -> str:
     return out_path
 
 
+def convert_midi_bigcircle(midi_path: str) -> List[str]:
+    """转换MIDI文件为大圈圈模式 - 每个轨道生成单独文件"""
+    print()
+    print(t('ui.separator'))
+    print(t('convert.title'))
+    print(t('ui.separator'))
+
+    print(t('convert.loading', path=midi_path))
+    midi_file = MidiFile(midi_path)
+
+    # 显示轨道信息
+    print()
+    print(t('ui.separator'))
+    print(t('track_info.title'))
+    print(t('ui.separator'))
+    for i, track in enumerate(midi_file.tracks):
+        print(t('track_info.track_size', id=i, size=len(track)))
+
+    # 选择轨道（大圈圈模式专用）
+    disable = select_tracks_bigcircle(len(midi_file.tracks))
+
+    print()
+    print(t('convert.using_bigcircle_mode'))
+
+    # 生成输出路径基础
+    idx = midi_path.rfind('.')
+    if idx != -1:
+        base_path = midi_path[:idx]
+    else:
+        base_path = midi_path
+
+    converter = BigCircleConverter()
+    output_files = []
+
+    # 处理每个轨道
+    for track_idx, track in enumerate(midi_file.tracks):
+        if disable[track_idx]:
+            print(t('convert.bigcircle_track_skip', idx=track_idx))
+            continue
+
+        print(t('convert.bigcircle_track_process', idx=track_idx))
+        
+        # 解析轨道音符
+        notes = converter.parse_midi_track(midi_file, track_idx)
+        
+        if not notes:
+            print(t('convert.bigcircle_track_empty', idx=track_idx))
+            continue
+
+        # 转换
+        map_data, offset_ms, out_path = converter.convert_track(
+            notes, 
+            track_name=str(track_idx),
+            base_path=base_path
+        )
+
+        if map_data is None:
+            continue
+
+        # 设置偏移
+        map_data.map_setting.offset = offset_ms
+
+        # 保存文件
+        map_data.save(out_path)
+        output_files.append(out_path)
+        print(t('convert.bigcircle_track_saved', path=out_path, count=len(map_data.tile_data_list)))
+
+    return output_files
+
+
+def select_tracks_bigcircle(track_count: int) -> list:
+    """选择要禁用的轨道（大圈圈模式专用）"""
+    disable = [False] * track_count
+
+    print()
+    print(t('ui.separator'))
+    print(t('ui.track_title_bigcircle'))
+    print(t('ui.track_status_bigcircle', count=track_count))
+
+    for i in range(track_count):
+        status = t('ui.track_disabled') if disable[i] else t('ui.track_enabled')
+        print(f"  {i}: {status}")
+
+    print()
+    print(t('ui.track_toggle_bigcircle'))
+    print(t('ui.track_continue'))
+    print(t('ui.separator'))
+
+    while True:
+        try:
+            choice = input(t('ui.track_input')).strip()
+            track_num = int(choice)
+
+            if track_num == -1:
+                break
+            elif 0 <= track_num < track_count:
+                disable[track_num] = not disable[track_num]
+                status = t('ui.track_disabled') if disable[track_num] else t('ui.track_enabled')
+                print(t('ui.track_set', num=track_num, status=status))
+            else:
+                print(t('ui.track_range_error', max=track_count - 1))
+        except ValueError:
+            print(t('error.invalid_integer'))
+
+    return disable
+
+
 def convert_audio(audio_path: str, mode: int) -> str:
     """转换音频文件"""
     print()
@@ -698,18 +813,40 @@ def main() -> None:
         mode = select_mode()
 
         # 根据输入源执行转换
-        if source == 1:
-            out_path = convert_midi(file_path, mode)
-        else:
+        if source == 1:  # MIDI
+            if mode == 4:  # 大圈圈模式
+                out_paths = convert_midi_bigcircle(file_path)
+                if out_paths:
+                    print()
+                    print(t('ui.separator'))
+                    print(t('convert.complete'))
+                    print(t('ui.separator'))
+                    print(t('convert.bigcircle_output_files', count=len(out_paths)))
+                    for p in out_paths:
+                        print(f"  - {p}")
+                    print()
+            else:
+                out_path = convert_midi(file_path, mode)
+                if out_path:
+                    print()
+                    print(t('ui.separator'))
+                    print(t('convert.complete'))
+                    print(t('ui.separator'))
+                    print(t('convert.output_file', path=out_path))
+                    print()
+        else:  # 音频
+            if mode == 4:
+                print(t('error.bigcircle_midi_only'))
+                input(t('exit.press_enter'))
+                return
             out_path = convert_audio(file_path, mode)
-
-        if out_path:
-            print()
-            print(t('ui.separator'))
-            print(t('convert.complete'))
-            print(t('ui.separator'))
-            print(t('convert.output_file', path=out_path))
-            print()
+            if out_path:
+                print()
+                print(t('ui.separator'))
+                print(t('convert.complete'))
+                print(t('ui.separator'))
+                print(t('convert.output_file', path=out_path))
+                print()
 
     except KeyboardInterrupt:
         print()
