@@ -111,7 +111,8 @@
         "sample_rate_invalid": "Error: Sample rate must be between 1 and 48000 Hz",
         "audio_load_failed": "Error: Failed to load audio file",
         "invalid_mode_bigcircle": "Error: Please enter 1, 2, 3, or 4",
-        "bigcircle_midi_only": "Error: Big Circle Mode only supports MIDI files"
+        "bigcircle_midi_only": "Error: Big Circle Mode only supports MIDI files",
+        "fullsample_audio_only": "Error: Full Sample Mode only supports audio files"
     },
     "convert": {
         "title": "Starting conversion...",

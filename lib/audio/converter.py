@@ -18,18 +18,17 @@ import os
 import numpy as np
 
 # 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from lib.midi.common import (
     MapData,
     TileData,
-    MapSetting,
     EventType,
     SetSpeed,
     Pause,
-    SetHitsound
+    SetHitsound,
+    Twirl
 )
-from lib.utils import ProgressBar
 
 
 class AudioAngleConverter:
@@ -71,7 +70,7 @@ class AudioAngleConverter:
             return MapData(use_angle_data=True)
 
         # 确定BPM
-        bpm = self.base_bpm if self.base_bpm else estimated_bpm
+        bpm = self.base_bpm if self.base_bpm is not None else estimated_bpm
 
         map_data = MapData(use_angle_data=True)
         map_data.map_setting.bpm = bpm
@@ -82,24 +81,21 @@ class AudioAngleConverter:
 
         tile_data_list = map_data.tile_data_list
 
-        # 添加起始瓷砖
-        tile_data_list.append(TileData(0, angle=0))
+        if len(beat_times) < 2:
+            tile_data_list.append(TileData(0, is_default=True))
+            return map_data
 
         # 计算节拍间隔
-        intervals = []
+        intervals: List[float] = []
         for i in range(1, len(beat_times)):
             intervals.append(beat_times[i] - beat_times[i - 1])
 
-        # 当前绝对角度
-        current_angle = 0.0
-
-        for i, interval in enumerate(intervals):
-            # 计算总旋转角度
-            # 时间 = 旋转角度/180 × 60/BPM
-            # 旋转角度 = 时间 × BPM × 180 / 60
+        # 先算出每段旋转角与需要补的 Pause
+        rotations: List[float] = []
+        pauses: List[float] = []
+        for interval in intervals:
             total_rotate_angle = interval * bpm * 180.0 / 60.0
 
-            # 处理大于360度的情况
             if total_rotate_angle > 360:
                 base_rotate_angle = total_rotate_angle % 360
                 if base_rotate_angle < 0.001:
@@ -109,25 +105,34 @@ class AudioAngleConverter:
                 pause_beats = 0
                 base_rotate_angle = total_rotate_angle
 
-            # 计算下一个角度
-            next_angle = current_angle + 180.0 - base_rotate_angle
+            rotations.append(base_rotate_angle)
+            pauses.append(pause_beats)
 
-            # 规范化到 (0, 360]
-            while next_angle <= 0:
-                next_angle += 360
-            while next_angle > 360:
-                next_angle -= 360
+        # 游戏自带 floor 0 起始砖块（不在 angleData 中）
+        tile_data_list.append(TileData(0, is_default=True))
 
-            tile_data = TileData(i + 1, angle=next_angle)
+        # floor i（i >= 1）对应 angleData[i-1]；共 len(intervals) 块显式瓷砖
+        angles: List[float] = [self._normalize_angle(180.0 - rotations[0])]
+        for i in range(1, len(intervals)):
+            angles.append(self._normalize_angle(angles[-1] + 180.0 - rotations[i]))
 
-            # 添加Pause事件
+        for floor, angle in enumerate(angles, start=1):
+            tile_data_list.append(TileData(floor, angle=angle))
+
+        # Pause 在“出发瓷砖”上生效：floor i 控制第 i 段（i=0 为默认砖块）
+        for i, pause_beats in enumerate(pauses):
             if pause_beats > 0:
-                tile_data.get_action_list(EventType.PAUSE).append(Pause(pause_beats))
-
-            tile_data_list.append(tile_data)
-            current_angle = next_angle
+                tile_data_list[i].get_action_list(EventType.PAUSE).append(
+                    Pause(pause_beats)
+                )
 
         return map_data
+
+    @staticmethod
+    def _normalize_angle(angle: float) -> float:
+        """规范化到 [0, 360)。"""
+        normalized = angle % 360.0
+        return 0.0 if abs(normalized) < 1e-12 else normalized
 
 
 class AudioZipperConverter:
@@ -137,13 +142,10 @@ class AudioZipperConverter:
 
     拉链模式原理：
     - 用户设置夹角 θ（如15°）
-    - angleData 序列：[0, 180-θ, 0, 180-θ, ...]
-    - 例如 θ=15° 时：angleData = [0, 165, 0, 165, 0, 165, ...]
-    - 旋转角度固定为 θ，方向交替（左转、右转、左转...）
-    - 形成锯齿/拉链形状
-
-    时间公式：时间 = θ/180 × 60/BPM
-    因此：BPM = θ/180 × 60/时间
+    - angleData 序列：[0, 180-θ, 0, 180-θ, ...]（从 0° 开始）
+    - 例如 θ=15° 时：angleData = [0, 165, 0, 165, ...]
+    - 第一段固定 180°，之后每段旋转 θ，方向逐块交替（Twirl）
+    - 时间：第一段 = 60/BPM，其余 = θ/180 × 60/BPM
     """
 
     def __init__(self, base_angle: float = 15.0):
@@ -207,56 +209,41 @@ class AudioZipperConverter:
 
         tile_data_list = map_data.tile_data_list
 
-        # 特殊情况：180° 夹角
-        # angleData = [0, 0, 0, ...]，每个旋转都是 180°
-        # 不需要 SetSpeed，直接用谱面 BPM
-        if self.base_angle == 180.0:
-            # 添加起始瓷砖
-            tile_data_list.append(TileData(0, angle=0))
-            
-            for i in range(1, len(beat_times)):
-                # 所有角度都是 0
-                tile_data_list.append(TileData(i, angle=0))
-            
-            return map_data
-
-        # 计算交替角度
-        # 拉链序列：[0, 180-angle, 0, 180-angle, ...]
-        # 例如 angle=15° 时：[0, 165, 0, 165, ...]
-        alternate_angle = 180.0 - self.base_angle
-
-        # 添加起始瓷砖
-        tile_data_list.append(TileData(0, angle=0))
-
         # 计算节拍间隔
-        intervals = []
+        intervals: List[float] = []
         for i in range(1, len(beat_times)):
             intervals.append(beat_times[i] - beat_times[i - 1])
 
-        for i, interval in enumerate(intervals):
-            # 计算显示BPM
-            # 时间 = angle/180 × 60/BPM
-            # BPM = angle/180 × 60/时间
-            display_bpm = self.base_angle / 180.0 * 60.0 / interval
+        if not intervals:
+            tile_data_list.append(TileData(0, is_default=True))
+            return map_data
 
-            # 拉链模式：角度在 0 和 (180-angle) 之间交替
-            # tile 1: 0 → alternate_angle (逆时针转 angle°)
-            # tile 2: alternate_angle → 0 (顺时针转 angle°)
-            # tile 3: 0 → alternate_angle
-            # ...
-            if (i + 1) % 2 == 1:  # 奇数位置：1, 3, 5, ...
-                next_angle = alternate_angle
-            else:  # 偶数位置：2, 4, 6, ...
-                next_angle = 0.0
+        # 游戏自带 floor 0 起始砖块；angleData 从 0° 开始：
+        # [0, 180-angle, 0, 180-angle, ...]
+        alternate_angle = 180.0 - self.base_angle
+        count = len(intervals)
 
-            tile_data = TileData(i + 1, angle=next_angle)
+        tile_data_list.append(TileData(0, is_default=True))
 
-            # 添加SetSpeed事件
-            tile_data.get_action_list(EventType.SET_SPEED).append(
-                SetSpeed("Bpm", display_bpm, 1.0)
+        for i in range(count):
+            tile_data_list.append(
+                TileData(i + 1, angle=0.0 if i % 2 == 0 else alternate_angle)
             )
 
-            tile_data_list.append(tile_data)
+        # 第一段：默认砖块 0° → angleData[0]=0°，固定 180°
+        tile_data_list[0].get_action_list(EventType.SET_SPEED).append(
+            SetSpeed("Bpm", 60.0 / intervals[0], 1.0)
+        )
+
+        # 之后每段：floor i → floor i+1 由 floor i 的 SetSpeed + Twirl 控制
+        # 第二段（0° → 165°）本身就走 15° 近路，从 floor 2 开始才需要 Twirl
+        for i in range(1, count):
+            display_bpm = self.base_angle / 180.0 * 60.0 / intervals[i]
+            tile_data_list[i].get_action_list(EventType.SET_SPEED).append(
+                SetSpeed("Bpm", display_bpm, 1.0)
+            )
+            if i >= 2:
+                tile_data_list[i].get_action_list(EventType.TWIRL).append(Twirl())
 
         return map_data
 
@@ -373,8 +360,8 @@ class FullSampleConverter:
         volumes = self._calculate_volumes(resampled_data)
 
         # 生成谱面
-        # 添加起始瓷砖 (floor 0)
-        tile_data_list.append(TileData(0, angle=0))
+        # 游戏自带 floor 0 起始砖块；每个采样点对应一块显式瓷砖
+        tile_data_list.append(TileData(0, is_default=True))
 
         # 为每个采样点添加瓷砖和SetHitsound事件（带进度条）
         for i, volume in enumerate(tqdm(volumes, desc="生成瓷砖", unit="个", ncols=80)):
@@ -440,6 +427,9 @@ class FullSampleConverter:
         # 取绝对值获取幅度
         amplitudes = np.abs(audio_data)
 
+        if amplitudes.size == 0:
+            return []
+
         # 归一化到 0-1
         max_amplitude = np.max(amplitudes)
         if max_amplitude > 0:
@@ -454,7 +444,7 @@ class FullSampleConverter:
         if not self.use_float_volume:
             volumes = np.round(volumes).astype(int)
 
-        return volumes.tolist()
+        return [float(v) for v in volumes.tolist()]
 
     @staticmethod
     def load_audio_file(file_path: str) -> Tuple[np.ndarray, int]:

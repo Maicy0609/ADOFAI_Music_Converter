@@ -14,7 +14,7 @@
 """
 
 import math
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from .common import (
     MapData,
@@ -33,7 +33,7 @@ A4_FREQUENCY = 440.0
 class BigCircleConverter:
     """大圈圈模式转换器"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.version = "v0.7-BigCircle"
 
     def convert_track(
@@ -41,7 +41,7 @@ class BigCircleConverter:
         notes: List[Tuple[float, int]],
         track_name: str = "",
         base_path: str = ""
-    ) -> Tuple[MapData, int, str]:
+    ) -> Tuple[Optional[MapData], int, Optional[str]]:
         """
         将音符列表转换为大圈圈模式的ADOFAI地图数据
         
@@ -68,21 +68,20 @@ class BigCircleConverter:
         
         tile_data_list = map_data.tile_data_list
         
-        # 添加起始瓷砖 (floor 0, 角度 = 0)
-        tile_data_list.append(TileData(0, angle=0))
+        # 游戏自带 floor 0 起始砖块（不在 angleData 中）
+        tile_data_list.append(TileData(0, is_default=True))
         
         # ====== 核心修改：在第0块地板放置唯一的Twirl，让全局变为逆时针旋转 ======
         twirl_tile = tile_data_list[0]
         twirl_tile.get_action_list(EventType.TWIRL).append(Twirl())
 
         floor = 0
-        offset_ms = int(unique_notes[0][0] * 1000)
+        offset_ms = int(round(unique_notes[0][0] * 1000))
         actual_time = unique_notes[0][0]
         prev_R = 1.0
-        
-        angle_data = [0]
-        actions = []
-        
+
+        angle_data: List[float] = [0.0]
+
         for idx in range(len(unique_notes)):
             start_time, pitch = unique_notes[idx]
             
@@ -126,21 +125,10 @@ class BigCircleConverter:
                 )
                 
             if idx > 0:
-                pos_tile = None
-                if floor + 1 < len(tile_data_list):
-                    pos_tile = tile_data_list[floor + 1]
-                else:
-                    pos_tile = TileData(floor + 1, angle=0)
-                    tile_data_list.append(pos_tile)
-                pos_tile.get_action_list(EventType.POSITION_TRACK).append(
-                    PositionTrack(
-                        position_offset=[round(prev_R, 3), 0],
-                        relative_to=[0, "ThisTile"],
-                        just_this_tile=False,
-                        editor_only=False
-                    )
-                )
-                
+                position_R = prev_R
+            else:
+                position_R = None
+
             prev_R = current_R
             delta_angle = 360.0 / N
             
@@ -152,6 +140,15 @@ class BigCircleConverter:
                 
                 # 添加新瓷砖
                 new_tile = TileData(floor, angle=round(new_angle, 10))
+                if j == 0 and position_R is not None:
+                    new_tile.get_action_list(EventType.POSITION_TRACK).append(
+                        PositionTrack(
+                            position_offset=[round(position_R, 3), 0],
+                            relative_to=[0, "ThisTile"],
+                            just_this_tile=False,
+                            editor_only=False
+                        )
+                    )
                 tile_data_list.append(new_tile)
                 
             actual_time = actual_time + wait_time + (N / f)
@@ -174,7 +171,7 @@ class BigCircleConverter:
         Returns:
             List[Tuple[float, int]]: 过滤后的音符列表
         """
-        unique_notes = []
+        unique_notes: List[Tuple[float, int]] = []
         for t, p in notes:
             if not unique_notes:
                 unique_notes.append((t, p))
@@ -186,7 +183,7 @@ class BigCircleConverter:
                     unique_notes.append((t, p))
         return unique_notes
 
-    def parse_midi_track(self, midi_file, track_idx: int) -> List[Tuple[float, int]]:
+    def parse_midi_track(self, midi_file: Any, track_idx: int) -> List[Tuple[float, int]]:
         """
         解析MIDI文件的指定轨道，提取音符列表
         
@@ -201,16 +198,17 @@ class BigCircleConverter:
             return []
             
         track = midi_file.tracks[track_idx]
-        timebound = 0
+        timebound: float = 0.0
         tempo = 500000  # 默认tempo (微秒/拍)
-        notes = []
-        
+        notes: List[Tuple[float, int]] = []
+
         for msg in track:
-            if msg.type == "set_tempo":
-                tempo = msg.tempo
+            # delta time 属于上一条消息之后、当前消息之前的区间，应先按旧 tempo 累计
             if msg.time > 0:
                 timebound += msg.time / midi_file.ticks_per_beat * tempo * 1e-6
+            if msg.type == "set_tempo":
+                tempo = int(msg.tempo)
             if msg.type == "note_on" and msg.velocity > 0:
-                notes.append((timebound, msg.note))
-                
+                notes.append((timebound, int(msg.note)))
+
         return notes

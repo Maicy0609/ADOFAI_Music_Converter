@@ -20,7 +20,7 @@ GitHub: https://github.com/Luxusio/ADOFAI-Midi-Converter
 
 import os
 import sys
-from typing import List
+from typing import Dict, List, Optional, TypedDict
 
 # 添加项目根目录到路径
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -170,7 +170,7 @@ def select_mode() -> int:
             print(t('error.invalid_number'))
 
 
-def select_tracks(track_count: int) -> list:
+def select_tracks(track_count: int) -> List[bool]:
     """选择要禁用的轨道"""
     disable = [False] * track_count
 
@@ -227,7 +227,7 @@ def get_octave_offset() -> int:
             print(t('error.invalid_integer'))
 
 
-def get_base_bpm() -> float:
+def get_base_bpm() -> Optional[float]:
     """获取基准 BPM"""
     print()
     print(t('ui.separator'))
@@ -320,7 +320,17 @@ def select_audio_mode() -> int:
             print(t('error.invalid_number'))
 
 
-def get_audio_params_peak() -> dict:
+class PeakParams(TypedDict):
+    height_min: float
+    height_max: float
+
+
+class FullSampleParams(TypedDict):
+    pseudo_sample_rate: float
+    use_float_volume: bool
+
+
+def get_audio_params_peak() -> PeakParams:
     """
     峰值采样模式参数
 
@@ -364,7 +374,7 @@ def get_audio_params_peak() -> dict:
     }
 
 
-def get_fullsample_params() -> dict:
+def get_fullsample_params() -> FullSampleParams:
     """
     全采音模式参数
 
@@ -440,7 +450,7 @@ def get_fullsample_params() -> dict:
 # 转换函数
 # ============================================================================
 
-def convert_midi(midi_path: str, mode: int) -> str:
+def convert_midi(midi_path: str, mode: int) -> Optional[str]:
     """转换MIDI文件"""
     print()
     print(t('ui.separator'))
@@ -485,8 +495,8 @@ def convert_midi(midi_path: str, mode: int) -> str:
         base_bpm = get_base_bpm()
         print()
         print(t('convert.using_angle_mode'))
-        converter = AngleDataConverter()
-        map_data = converter.convert(us_delay_list, base_bpm)
+        angle_converter = AngleDataConverter()
+        map_data = angle_converter.convert(us_delay_list, base_bpm)
 
         if base_bpm is None:
             base_bpm = map_data.map_setting.bpm
@@ -497,8 +507,8 @@ def convert_midi(midi_path: str, mode: int) -> str:
         custom_angle = get_custom_angle()
         print()
         print(t('convert.using_zipper_mode'))
-        converter = AngleCustomConverter(base_angle=custom_angle)
-        map_data = converter.convert(us_delay_list)
+        zipper_converter = AngleCustomConverter(base_angle=custom_angle)
+        map_data = zipper_converter.convert(us_delay_list)
         mode_suffix = f"_zipper_{int(custom_angle) if custom_angle == int(custom_angle) else custom_angle}"
 
     print(t('convert.tiles_generated', count=len(map_data.tile_data_list)))
@@ -547,7 +557,7 @@ def convert_midi_bigcircle(midi_path: str) -> List[str]:
         base_path = midi_path
 
     converter = BigCircleConverter()
-    output_files = []
+    output_files: List[str] = []
 
     # 处理每个轨道
     for track_idx, track in enumerate(midi_file.tracks):
@@ -571,7 +581,7 @@ def convert_midi_bigcircle(midi_path: str) -> List[str]:
             base_path=base_path
         )
 
-        if map_data is None:
+        if map_data is None or out_path is None:
             continue
 
         # 设置偏移
@@ -585,7 +595,7 @@ def convert_midi_bigcircle(midi_path: str) -> List[str]:
     return output_files
 
 
-def select_tracks_bigcircle(track_count: int) -> list:
+def select_tracks_bigcircle(track_count: int) -> List[bool]:
     """选择要禁用的轨道（大圈圈模式专用）"""
     disable = [False] * track_count
 
@@ -622,7 +632,7 @@ def select_tracks_bigcircle(track_count: int) -> list:
     return disable
 
 
-def convert_audio(audio_path: str, mode: int) -> str:
+def convert_audio(audio_path: str, mode: int) -> Optional[str]:
     """转换音频文件"""
     print()
     print(t('ui.separator'))
@@ -640,8 +650,14 @@ def convert_audio(audio_path: str, mode: int) -> str:
         print(t('error.file_load_failed'))
         return None
 
+    sample_rate = processor.sample_rate
+    samples = processor.samples
+    if sample_rate is None or samples is None:
+        print(t('error.file_load_failed'))
+        return None
+
     print()
-    print(t('convert.sample_info', rate=processor.sample_rate, duration=processor.duration))
+    print(t('convert.sample_info', rate=sample_rate, duration=processor.duration))
 
     # 选择音频采样模式
     audio_mode = select_audio_mode()
@@ -657,7 +673,7 @@ def convert_audio(audio_path: str, mode: int) -> str:
         energy_signal = processor.get_energy_signal()
         beat_times = detector.detect_peaks(
             energy_signal,
-            processor.sample_rate,
+            sample_rate,
             height_min=params['height_min'],
             height_max=params['height_max']
         )
@@ -665,8 +681,8 @@ def convert_audio(audio_path: str, mode: int) -> str:
     else:
         # 采样点全采样模式
         beat_times = detector.detect_all_samples(
-            processor.sample_rate,
-            len(processor.samples)
+            sample_rate,
+            len(samples)
         )
         mode_suffix_audio = "_full"
 
@@ -692,18 +708,21 @@ def convert_audio(audio_path: str, mode: int) -> str:
 
         print()
         print(t('convert.using_angle_mode'))
-        converter = AudioAngleConverter(base_bpm=base_bpm)
-        map_data = converter.convert(beat_times, estimated_bpm)
+        audio_angle_converter = AudioAngleConverter(base_bpm=base_bpm)
+        map_data = audio_angle_converter.convert(beat_times, estimated_bpm)
         mode_suffix = "_angle"
     else:
         custom_angle = get_custom_angle()
         print()
         print(t('convert.using_zipper_mode'))
-        converter = AudioZipperConverter(base_angle=custom_angle)
-        map_data = converter.convert(beat_times, estimated_bpm)
+        audio_zipper_converter = AudioZipperConverter(base_angle=custom_angle)
+        map_data = audio_zipper_converter.convert(beat_times, estimated_bpm)
         mode_suffix = f"_zipper_{int(custom_angle) if custom_angle == int(custom_angle) else custom_angle}"
 
     print(t('convert.tiles_generated', count=len(map_data.tile_data_list)))
+
+    # 记录音频文件名，否则游戏里没有歌曲可播放
+    map_data.map_setting.song_filename = os.path.basename(audio_path)
 
     # 生成输出路径
     idx = audio_path.rfind('.')
@@ -717,7 +736,7 @@ def convert_audio(audio_path: str, mode: int) -> str:
     return out_path
 
 
-def convert_audio_fullsample(audio_path: str) -> str:
+def convert_audio_fullsample(audio_path: str) -> Optional[str]:
     """全采音模式转换音频文件"""
     print(t('convert.loading', path=audio_path))
 
@@ -814,6 +833,10 @@ def main() -> None:
 
         # 根据输入源执行转换
         if source == 1:  # MIDI
+            if mode == 3:  # 全采音模式仅适用于音频
+                print(t('error.fullsample_audio_only'))
+                input(t('exit.press_enter'))
+                return
             if mode == 4:  # 大圈圈模式
                 out_paths = convert_midi_bigcircle(file_path)
                 if out_paths:

@@ -6,15 +6,11 @@
 核心原理：
 - 用户输入夹角 θ（如15°）
 - 旋转角度固定为 θ，方向交替
-- angleData 序列：[0, 180-θ, 0, 180-θ, ...]
-- 例如 θ=15° 时：angleData = [0, 165, 0, 165, 0, 165, ...]
-- 时间公式：时间 = θ/180 × 60/BPM
-- 显示BPM = θ/180 × 60/时间
-
-旋转方向：
-- 从 0 到 (180-θ)：逆时针旋转 θ°
-- 从 (180-θ) 到 0：顺时针旋转 θ°
-- 形成锯齿/拉链形状
+- 游戏自带 floor 0 起始砖块；angleData 从 0° 开始：
+  [0, 180-θ, 0, 180-θ, ...]（例如 θ=15° → [0, 165, 0, 165, ...]）
+- 第一段固定旋转 180°；之后每段旋转 θ，方向逐块交替（Twirl）
+- 时间：第一段 = 60/BPM，其余 = θ/180 × 60/BPM
+- 因此 floor 0 的 BPM = 60/时间，其余显示BPM = θ/180 × 60/时间
 
 特殊处理：
 - θ = 0°：不合法，拒绝（无法移动）
@@ -28,7 +24,7 @@ from .common import (
     TileData,
     EventType,
     SetSpeed,
-    Pause
+    Twirl
 )
 
 
@@ -116,58 +112,33 @@ class AngleCustomConverter:
         map_data = MapData(use_angle_data=True)
         tile_data_list = map_data.tile_data_list
 
-        # 特殊情况：180° 夹角
-        # angleData = [0, 0, 0, ...]，每个旋转都是 180°
-        # 不需要 SetSpeed，直接用谱面 BPM
-        if angle == 180.0:
-            # 添加起始瓷砖
-            tile_data_list.append(TileData(0, angle=0))
-            
-            for i in range(len(us_delay_list)):
-                # 所有角度都是 0
-                tile_data_list.append(TileData(i + 1, angle=0))
-            
-            return map_data
-
-        # 计算交替角度
-        # 拉链序列：[0, 180-angle, 0, 180-angle, ...]
-        # 例如 angle=15° 时：[0, 165, 0, 165, ...]
+        # 游戏自带 floor 0 起始砖块（不在 angleData 中）。
+        # angleData 从 0 开始、按 [0, 180-angle, 0, 180-angle, ...] 排列。
         alternate_angle = 180.0 - angle
+        count = len(us_delay_list)
 
-        # 添加起始瓷砖 (floor 0, 角度 = 0)
-        tile_data_list.append(TileData(0, angle=0))
+        tile_data_list.append(TileData(0, is_default=True))
 
-        for i, us_delay in enumerate(us_delay_list):
-            # 计算时间（秒）
-            time_seconds = us_delay / 1000000.0
-            
-            # 计算显示BPM
-            # 时间 = angle/180 × 60/BPM
-            # BPM = angle/180 × 60/时间
-            display_bpm = angle / 180.0 * 60.0 / time_seconds
-
-            # 拉链模式：角度在 0 和 (180-angle) 之间交替
-            # tile 1: 0 → alternate_angle (逆时针转 angle°)
-            # tile 2: alternate_angle → 0 (顺时针转 angle°)
-            # tile 3: 0 → alternate_angle
-            # ...
-            if (i + 1) % 2 == 1:  # 奇数位置：1, 3, 5, ...
-                next_angle = alternate_angle
-            else:  # 偶数位置：2, 4, 6, ...
-                next_angle = 0.0
-
-            tile_data = TileData(i + 1, angle=next_angle)
-
-            # 添加 SetSpeed 事件
-            tile_data.get_action_list(EventType.SET_SPEED).append(
-                SetSpeed("Bpm", display_bpm, 1.0)
+        for i in range(count):
+            tile_data_list.append(
+                TileData(i + 1, angle=0.0 if i % 2 == 0 else alternate_angle)
             )
 
-            # 注意：拉链模式下旋转角度固定为 angle（≤ 180°）
-            # 如果时间间隔很长，display_bpm 会很小，但这是允许的
-            # 不需要 Pause 事件，因为旋转角度不会超过 360°
+        # 第一段：默认砖块 0° → angleData[0]=0°，固定 180°
+        tile_data_list[0].get_action_list(EventType.SET_SPEED).append(
+            SetSpeed("Bpm", 60.0 / (us_delay_list[0] / 1000000.0), 1.0)
+        )
 
-            tile_data_list.append(tile_data)
+        # 之后每段：floor i → floor i+1 由 floor i 的 SetSpeed + Twirl 控制
+        # 第二段（0° → 165°）本身就走 15° 近路，从 floor 2 开始才需要 Twirl
+        for i in range(1, count):
+            time_seconds = us_delay_list[i] / 1000000.0
+            display_bpm = angle / 180.0 * 60.0 / time_seconds
+            tile_data_list[i].get_action_list(EventType.SET_SPEED).append(
+                SetSpeed("Bpm", display_bpm, 1.0)
+            )
+            if i >= 2:
+                tile_data_list[i].get_action_list(EventType.TWIRL).append(Twirl())
 
         return map_data
 

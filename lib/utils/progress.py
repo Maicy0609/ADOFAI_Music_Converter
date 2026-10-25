@@ -5,7 +5,9 @@
 """
 
 import sys
-from typing import Optional, Callable, Any
+from typing import Iterable, Iterator, Optional, Sized, TypeVar
+
+T = TypeVar("T")
 
 
 class ProgressBar:
@@ -85,11 +87,11 @@ class ProgressBar:
 
 
 def show_progress(
-    iterable,
+    iterable: Iterable[T],
     total: Optional[int] = None,
     prefix: str = "",
     suffix: str = ""
-) -> Any:
+) -> Iterator[T]:
     """
     带进度条的迭代器
 
@@ -107,10 +109,7 @@ def show_progress(
         迭代元素
     """
     if total is None:
-        try:
-            total = len(iterable)
-        except TypeError:
-            total = 0
+        total = len(iterable) if isinstance(iterable, Sized) else 0
 
     progress = ProgressBar(total, prefix, suffix)
 
@@ -125,7 +124,7 @@ def progress_range(
     total: int,
     prefix: str = "",
     suffix: str = ""
-) -> range:
+) -> Iterable[int]:
     """
     带进度条的 range
 
@@ -153,7 +152,7 @@ class _ProgressRange:
         self.suffix = suffix
         self._progress: Optional[ProgressBar] = None
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         self._progress = ProgressBar(self.total, self.prefix, self.suffix)
         for i in range(self.total):
             yield i

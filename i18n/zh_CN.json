@@ -111,7 +111,8 @@
         "sample_rate_invalid": "错误: 采样率必须在 1 到 48000 Hz 之间",
         "audio_load_failed": "错误: 音频文件加载失败",
         "invalid_mode_bigcircle": "错误: 请输入 1、2、3 或 4",
-        "bigcircle_midi_only": "错误: 大圈圈模式仅支持MIDI文件"
+        "bigcircle_midi_only": "错误: 大圈圈模式仅支持MIDI文件",
+        "fullsample_audio_only": "错误: 全采音模式仅支持音频文件"
     },
     "convert": {
         "title": "开始转换...",

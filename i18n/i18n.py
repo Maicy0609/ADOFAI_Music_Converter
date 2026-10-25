@@ -6,7 +6,7 @@
 
 import json
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict
 
 # 支持的语言列表
 SUPPORTED_LANGUAGES = {
@@ -78,45 +78,42 @@ def set_language(lang_code: str) -> bool:
     return load_language(lang_code)
 
 
-def t(key: str, **kwargs) -> str:
+def t(key: str, **kwargs: Any) -> str:
     """
     翻译函数 - Translate
-    
+
     Args:
         key: 翻译键，支持点分隔的嵌套键，如 'app.title'
         **kwargs: 格式化参数
-    
+
     Returns:
         str: 翻译后的文本
     """
     global _translations
-    
+
     # 如果还没有加载翻译，先加载默认语言
     if not _translations:
         load_language(DEFAULT_LANGUAGE)
-    
+
     # 解析嵌套键
     keys = key.split('.')
-    value = _translations
-    
+    node: Any = _translations
+
     for k in keys:
-        if isinstance(value, dict) and k in value:
-            value = value[k]
+        if isinstance(node, dict) and k in node:
+            node = node[k]
         else:
             # 键不存在，返回键本身
             return key
-    
+
     # 如果不是字符串，转换为字符串
-    if not isinstance(value, str):
-        value = str(value)
-    
+    text = node if isinstance(node, str) else str(node)
+
     # 格式化参数
     try:
-        return value.format(**kwargs)
-    except KeyError:
-        return value
-    except ValueError:
-        return value
+        return text.format(**kwargs)
+    except (KeyError, ValueError, IndexError):
+        return text
 
 
 def get_supported_languages() -> Dict[str, str]:

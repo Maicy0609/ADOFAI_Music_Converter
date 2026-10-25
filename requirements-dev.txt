@@ -1,0 +1,4 @@
+-r requirements.txt
+mypy>=1.11
+scipy-stubs>=1.11
+types-tqdm>=4.66

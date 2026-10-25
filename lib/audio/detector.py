@@ -20,7 +20,7 @@ except ImportError:
 class BeatDetector:
     """节拍检测器"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.beat_times: List[float] = []
         self.smoothed_signal: Optional[np.ndarray] = None
 
@@ -51,7 +51,7 @@ class BeatDetector:
         print(f"  峰值采样: 阈值=[{height_min}, {height_max}], 找到 {len(peaks)} 个峰值")
 
         # 转换为时间（秒）
-        self.beat_times = (peaks / sample_rate).tolist()
+        self.beat_times = [float(p) / sample_rate for p in peaks]
 
         return self.beat_times
 

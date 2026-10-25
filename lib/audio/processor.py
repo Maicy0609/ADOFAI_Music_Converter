@@ -21,7 +21,7 @@ except ImportError:
 class AudioProcessor:
     """音频处理器（只支持 WAV）"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.sample_rate: Optional[int] = None
         self.samples: Optional[np.ndarray] = None
         self.duration: float = 0.0
@@ -91,16 +91,15 @@ class AudioProcessor:
         if self.samples is None:
             raise ValueError("No audio loaded")
 
-        y0 = self.samples
-        y1 = np.int32(y0) ** 2
+        samples = self.samples.astype(np.float64, copy=False)
+        energy = samples * samples
 
-        y1_max = y1.max()
-        if y1_max == 0:
-            return np.zeros(len(y1), dtype=np.int16)
-        
-        y1 = np.int16((y1 / y1_max) * 32767)
+        energy_max = float(energy.max()) if energy.size else 0.0
+        if energy_max <= 0:
+            return np.zeros(energy.shape, dtype=np.int16)
 
-        return y1
+        # 使用 float64 计算，避免 24-bit/32-bit 样本平方时 int32 溢出
+        return np.asarray(energy / energy_max * 32767, dtype=np.int16)
 
     def get_time_axis(self) -> np.ndarray:
         """

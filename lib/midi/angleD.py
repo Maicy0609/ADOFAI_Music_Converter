@@ -3,13 +3,12 @@
 angleData模式转换器
 使用纯角度控制实现节奏控制
 
-核心原理（参考 pyadofai 库）：
-- angleData 存储的是瓷砖的绝对朝向角度，范围 (0, 360]
-- 旋转角度（决定节拍）= (angleData[i-1] + 180 - angleData[i]) mod 360
-- 如果旋转角度 <= 0，则加 360
-- 节拍 = 旋转角度 / 180
-- 时间 = 节拍 × 60 / BPM
-- Pause 事件可以增加额外的旋转角度（duration * 180°）
+核心原理（参考游戏源码 / SharpFAI 的 FloorTimingCalculator）：
+- 游戏自带 floor 0 起始砖块（不在 angleData 中），angleData[i] 对应 floor i+1
+- 第一段旋转（default → angleData[0]）= 180° - angleData[0]
+- 之后第 j 段旋转（j >= 1）= angleData[j-1] + 180 - angleData[j]
+- 节拍 = 旋转角度 / 180，时间 = 节拍 × 60 / BPM
+- Pause 事件在“出发瓷砖”上增加额外时间（duration 拍）
 """
 
 from typing import List, Optional
@@ -52,18 +51,12 @@ class AngleDataConverter:
 
         tile_data_list = map_data.tile_data_list
 
-        # 添加起始瓷砖 (floor 0, 角度 = 0)
-        tile_data_list.append(TileData(0, angle=0))
-
-        # 当前绝对角度
-        current_angle = 0.0
-
-        for i, us_delay in enumerate(us_delay_list):
-            # 计算总旋转角度
+        # 先算出每个延迟对应的“实际旋转角”和需要补的 Pause
+        rotations: List[float] = []
+        pauses: List[float] = []
+        for us_delay in us_delay_list:
             total_rotate_angle = us_delay * base_bpm / 60.0 / 1000000.0 * 180.0
 
-            # 计算需要的 Pause duration 和基础旋转角度
-            # 基础旋转角度必须在 (0, 360] 范围内
             if total_rotate_angle > 360:
                 base_rotate_angle = total_rotate_angle % 360
                 if base_rotate_angle < 0.001:
@@ -73,60 +66,56 @@ class AngleDataConverter:
                 pause_beats = 0
                 base_rotate_angle = total_rotate_angle
 
-            # 计算下一个瓷砖的绝对角度
-            next_angle = current_angle + 180.0 - base_rotate_angle
+            rotations.append(base_rotate_angle)
+            pauses.append(pause_beats)
 
-            # 规范化到 (0, 360] 范围
-            while next_angle <= 0:
-                next_angle += 360
-            while next_angle > 360:
-                next_angle -= 360
+        # 游戏自带 floor 0 起始砖块（不在 angleData 中），事件放在这里作用于第一段
+        tile_data_list.append(TileData(0, is_default=True))
 
-            tile_data = TileData(i + 1, angle=next_angle)
+        # floor i（i >= 1）对应 angleData[i-1]；一共 len(us_delay_list) 块显式瓷砖
+        angles: List[float] = [self._normalize_angle(180.0 - rotations[0])]
+        for i in range(1, len(us_delay_list)):
+            angles.append(self._normalize_angle(angles[-1] + 180.0 - rotations[i]))
 
-            # 如果需要 Pause 事件
+        for floor, angle in enumerate(angles, start=1):
+            tile_data_list.append(TileData(floor, angle=angle))
+
+        # Pause 在“出发瓷砖”上生效：floor i 控制第 i 段（i=0 为默认砖块）
+        for i, pause_beats in enumerate(pauses):
             if pause_beats > 0:
-                tile_data.get_action_list(EventType.PAUSE).append(Pause(pause_beats))
-
-            tile_data_list.append(tile_data)
-
-            current_angle = next_angle
+                tile_data_list[i].get_action_list(EventType.PAUSE).append(
+                    Pause(pause_beats)
+                )
 
         return map_data
 
     @staticmethod
+    def _normalize_angle(angle: float) -> float:
+        """规范化到 [0, 360)。"""
+        normalized = angle % 360.0
+        return 0.0 if abs(normalized) < 1e-12 else normalized
+
+    @staticmethod
     def get_rotate_angle(angle_data: List[float], index: int) -> float:
         """
-        计算从瓷砖 index-1 到瓷砖 index 的旋转角度
-        
+        计算瓷砖 index 到下一块瓷砖的旋转角度
+
         Args:
             angle_data: angleData数组
-            index: 目标瓷砖索引
-        
+            index: 出发瓷砖索引
+
         Returns:
             float: 旋转角度
         """
-        if index <= 0 or index >= len(angle_data):
+        if index < 0 or index >= len(angle_data):
             return 0.0
 
-        prev_angle = angle_data[index - 1]
-        curr_angle = angle_data[index]
+        if index == 0:
+            return AngleDataConverter._normalize_angle(180.0 - angle_data[0])
 
-        # 规范化角度到 (0, 360]
-        if prev_angle <= 0:
-            prev_angle += 360
-        if curr_angle <= 0:
-            curr_angle += 360
-
-        absolute_angle1 = prev_angle + 180
-        if absolute_angle1 > 360:
-            absolute_angle1 -= 360
-
-        rotate_angle = absolute_angle1 - curr_angle
-        if rotate_angle <= 0:
-            rotate_angle += 360
-
-        return rotate_angle
+        return AngleDataConverter._normalize_angle(
+            angle_data[index - 1] + 180.0 - angle_data[index]
+        )
 
     @staticmethod
     def calculate_base_bpm(us_delay_list: List[int]) -> float:

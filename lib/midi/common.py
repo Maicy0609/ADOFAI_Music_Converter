@@ -6,9 +6,8 @@ MIDI转换通用模块
 
 import sys
 from enum import Enum
-from typing import List, Dict, Set, Optional, Any
+from typing import List, Dict, Set, Optional, Any, Union, Iterable
 from abc import ABC, abstractmethod
-from statistics import median
 
 try:
     from mido import MidiFile
@@ -179,7 +178,7 @@ class SetSpeed(Action):
 class Twirl(Action):
     """旋转动作"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(EventType.TWIRL)
 
     def save(self, sb: List[str], floor: int) -> None:
@@ -208,9 +207,9 @@ class PositionTrack(Action):
     """位置轨道动作 - 用于大圈圈模式调整轨道位置"""
 
     def __init__(self, position_offset: Optional[List[float]] = None,
-                 relative_to: Optional[List] = None,
+                 relative_to: Optional[List[Union[int, str]]] = None,
                  just_this_tile: bool = False,
-                 editor_only: bool = False):
+                 editor_only: bool = False) -> None:
         super().__init__(EventType.POSITION_TRACK)
         self.position_offset = position_offset
         self.relative_to = relative_to
@@ -232,11 +231,11 @@ class PositionTrack(Action):
             sb.append(']')
         if self.relative_to is not None:
             sb.append(', "relativeTo": [')
-            for i, v in enumerate(self.relative_to):
-                if isinstance(v, str):
-                    sb.append(f'"{v}"')
+            for i, rv in enumerate(self.relative_to):
+                if isinstance(rv, str):
+                    sb.append(f'"{rv}"')
                 else:
-                    sb.append(str(v))
+                    sb.append(str(rv))
                 if i < len(self.relative_to) - 1:
                     sb.append(', ')
             sb.append(']')
@@ -291,7 +290,7 @@ class MidiParser:
 
     NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.tone_hz = [32.7032, 34.6478, 36.7081, 38.8909, 41.2304, 43.6535,
                         46.2493, 48.9994, 51.913, 55.0, 58.2705, 61.7354]
         self.tone_delay: Dict[int, float] = {}
@@ -447,7 +446,7 @@ class MidiParser:
 class MapSetting:
     """ADOFAI地图设置"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.version: int = 2
         self.artist: str = "Artist"
         self.special_artist_type: str = "None"
@@ -592,10 +591,13 @@ class MapSetting:
 class TileData:
     """ADOFAI瓷砖数据"""
 
-    def __init__(self, floor: int, tile_angle: TileAngle = None, angle: float = None):
+    def __init__(self, floor: int, tile_angle: Optional[TileAngle] = None,
+                 angle: Optional[float] = None, is_default: bool = False) -> None:
         self.floor = floor
         self.tile_angle = tile_angle  # 用于 pathData 模式
         self.angle = angle  # 用于 angleData 模式
+        # 游戏自带的起始砖块：不在 angleData/pathData 中，但可以承载 floor 0 的事件
+        self.is_default = is_default
         self.action_list_map: Dict[EventType, List[Action]] = {}
 
     def save(self, sb: List[str]) -> None:
@@ -622,7 +624,8 @@ class TileData:
             EventType.POSITION_TRACK,
             EventType.REPEAT_EVENTS,
             EventType.BLOOM,
-            EventType.SET_CONDITIONAL_EVENTS
+            EventType.SET_CONDITIONAL_EVENTS,
+            EventType.CHANGE_TRACK
         ]
 
         for event_type in event_order:
@@ -652,7 +655,7 @@ class TileData:
 class MapData:
     """ADOFAI地图数据"""
 
-    def __init__(self, use_angle_data: bool = False):
+    def __init__(self, use_angle_data: bool = False) -> None:
         self.map_setting = MapSetting()
         self.tile_data_list: List[TileData] = []
         self.use_angle_data = use_angle_data
@@ -671,33 +674,37 @@ class MapData:
 
         if self.use_angle_data:
             sb.append('\t"angleData": [')
-            if show_progress and len(self.tile_data_list) > 10000:
+            tiles = [tile for tile in self.tile_data_list if not tile.is_default]
+            progress_tiles: Iterable[TileData] = tiles
+            if show_progress and len(tiles) > 10000:
                 from tqdm import tqdm
-                for i, tile_data in enumerate(tqdm(self.tile_data_list, desc="写入angleData", unit="个", ncols=80)):
-                    if i > 0:
-                        sb.append(', ')
-                    angle = tile_data.angle
-                    long_value = int(angle)
-                    if angle == long_value:
-                        sb.append(str(long_value))
-                    else:
-                        sb.append(f'{angle:.6f}')
-            else:
-                for i, tile_data in enumerate(self.tile_data_list):
-                    if i > 0:
-                        sb.append(', ')
-                    angle = tile_data.angle
-                    long_value = int(angle)
-                    if angle == long_value:
-                        sb.append(str(long_value))
-                    else:
-                        sb.append(f'{angle:.6f}')
+                progress_tiles = tqdm(tiles, desc="写入angleData", unit="个", ncols=80)
+            for i, tile_data in enumerate(progress_tiles):
+                if i > 0:
+                    sb.append(', ')
+                angle = tile_data.angle
+                if angle is None:
+                    raise ValueError(
+                        f"Tile {tile_data.floor} has no angle; "
+                        "angleData maps require every tile to have an angle"
+                    )
+                long_value = int(angle)
+                if angle == long_value:
+                    sb.append(str(long_value))
+                else:
+                    sb.append(f'{angle:.6f}')
             sb.append('], \n')
         else:
             sb.append('\t"pathData": "')
-            for i, tile_data in enumerate(self.tile_data_list):
-                if i > 0:
-                    sb.append(tile_data.tile_angle.name_char)
+            for tile_data in self.tile_data_list:
+                if tile_data.is_default:
+                    continue
+                if tile_data.tile_angle is None:
+                    raise ValueError(
+                        f"Tile {tile_data.floor} has no tile_angle; "
+                        "pathData maps require every tile to have a TileAngle"
+                    )
+                sb.append(tile_data.tile_angle.name_char)
             sb.append('", \n')
 
         sb.append('\t"settings":\n\t{\n')
